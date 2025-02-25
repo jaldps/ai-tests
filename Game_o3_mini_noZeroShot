@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Two-Player Reaction Time Game</title>
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap" rel="stylesheet">
+  <style>
+    /* Global Styles */
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Roboto', sans-serif;
+      background: linear-gradient(135deg, #ece9e6, #ffffff);
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      color: #333;
+    }
+    h1 {
+      margin-top: 20px;
+      font-size: 2rem;
+      font-weight: 500;
+    }
+    /* Game Container */
+    #gameContainer {
+      width: 90%;
+      max-width: 900px;
+      height: 450px;
+      margin: 20px auto;
+      position: relative;
+      background: #f9f9f9;
+      border: 2px solid #ddd;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      /* The background gradient will be updated dynamically */
+    }
+    /* Dividing Line */
+    #dividingLine {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 6px;
+      background-color: #333;
+      left: 50%;
+      transform: translateX(-50%);
+      transition: left 0.5s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    /* Display Area for Letters/Numbers */
+    #display {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 96px;
+      font-weight: 700;
+      pointer-events: none;
+      text-shadow: 2px 2px 8px rgba(0,0,0,0.2);
+    }
+    /* Info Panel */
+    #infoPanel {
+      width: 90%;
+      max-width: 900px;
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      margin: 10px auto;
+      padding: 10px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    #infoPanel div { font-size: 18px; font-weight: 500; }
+    /* Message & Reaction Times */
+    #message, #reactionTimes {
+      width: 90%;
+      max-width: 900px;
+      text-align: center;
+      margin: 10px auto;
+      font-size: 20px;
+    }
+    #message { color: #d32f2f; font-weight: 500; }
+    #reactionTimes {
+      display: flex;
+      justify-content: space-around;
+    }
+    #reactionTimes div { font-size: 18px; font-weight: 500; }
+    /* Game Over Screen */
+    #gameOverScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.75);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 36px;
+      text-align: center;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    #gameOverScreen.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    /* Visual Keyboard */
+    #keyboard {
+      width: 90%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 8px;
+      margin: 20px auto;
+    }
+    .key {
+      padding: 12px 0;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 500;
+      transition: background 0.3s ease, transform 0.3s ease;
+      text-align: center;
+    }
+    .key:hover {
+      background: #f0f0f0;
+      transform: translateY(-2px);
+    }
+    .player1Key { background-color: rgba(255,0,0,0.2); }
+    .player2Key { background-color: rgba(0,0,255,0.2); }
+    .sharedKey { background-color: purple; color: #fff; }
+  </style>
+</head>
+<body>
+  <h1>Reaction Time Game</h1>
+  <div id="gameContainer">
+    <div id="dividingLine"></div>
+    <div id="display"></div>
+    <div id="gameOverScreen">
+      <div id="gameOverText"></div>
+      <div style="margin-top:20px; font-size: 20px;">Press SPACE to restart</div>
+    </div>
+  </div>
+  <div id="infoPanel">
+    <div>Round: <span id="roundNumber">0</span></div>
+    <div>Player 1 Territory: <span id="player1Territory">50%</span></div>
+    <div>Player 2 Territory: <span id="player2Territory">50%</span></div>
+  </div>
+  <div id="message">Press SPACE to start the game</div>
+  <div id="reactionTimes">
+    <div>Player 1 Reaction: <span id="p1Reaction">-</span> ms</div>
+    <div>Player 2 Reaction: <span id="p2Reaction">-</span> ms</div>
+  </div>
+  <div id="keyboard"></div>
+  
+  <script>
+    /*************** Game Variables ***************/
+    let gameState = "waiting"; // states: waiting, getReady, active, gameOver
+    let linePosition = 50; // dividing line percentage position
+    let round = 0;
+    let correctKeys = { p1: null, p2: null };
+    let startTime = 0;
+    let reactionRecorded = { p1: false, p2: false };
+    let roundTimeout;
+    
+    // Allowed keys for each player (including shared key 'V')
+    const player1Keys = ["1","2","3","4","Q","W","E","R","A","S","D","F","Z","X","C","V"];
+    const player2Keys = ["7","8","9","0","U","I","O","P","H","J","K","L","B","N","M","V"];
+    
+    /*************** Setup Visual Keyboard ***************/
+    const keyboardContainer = document.getElementById("keyboard");
+    const allKeys = [...new Set([...player1Keys, ...player2Keys])].sort();
+    allKeys.forEach(key => {
+      const keyDiv = document.createElement("div");
+      keyDiv.classList.add("key");
+      const isP1 = player1Keys.includes(key);
+      const isP2 = player2Keys.includes(key);
+      if(isP1 && isP2) {
+        keyDiv.classList.add("sharedKey");
+      } else if(isP1) {
+        keyDiv.classList.add("player1Key");
+      } else if(isP2) {
+        keyDiv.classList.add("player2Key");
+      }
+      keyDiv.textContent = key;
+      keyboardContainer.appendChild(keyDiv);
+    });
+    
+    /*************** UI Update Functions ***************/
+    function updateUI() {
+      // Update dividing line position
+      document.getElementById("dividingLine").style.left = linePosition + "%";
+      // Update territory percentages
+      document.getElementById("player1Territory").textContent = linePosition + "%";
+      document.getElementById("player2Territory").textContent = (100 - linePosition) + "%";
+      document.getElementById("roundNumber").textContent = round;
+      
+      // Dynamically update the background gradient so that the red territory covers 0 to linePosition%
+      // and blue covers from linePosition% to 100%.
+      document.getElementById("gameContainer").style.background = 
+        `linear-gradient(to right, rgba(255,0,0,0.1) 0%, rgba(255,0,0,0.1) ${linePosition}%, rgba(0,0,255,0.1) ${linePosition}%, rgba(0,0,255,0.1) 100%)`;
+    }
+    
+    function resetRoundDisplay() {
+      document.getElementById("display").textContent = "";
+      document.getElementById("message").textContent = "";
+      document.getElementById("p1Reaction").textContent = "-";
+      document.getElementById("p2Reaction").textContent = "-";
+    }
+    
+    /*************** Game Reset Function ***************/
+    function resetGame() {
+      linePosition = 50;
+      round = 0;
+      gameState = "waiting";
+      document.getElementById("gameOverScreen").classList.remove("active");
+      updateUI();
+    }
+    
+    /*************** Round Control Functions ***************/
+    function startRound() {
+      // Ensure the game over screen is hidden at the start of a new round
+      document.getElementById("gameOverScreen").classList.remove("active");
+      
+      round++;
+      updateUI();
+      resetRoundDisplay();
+      gameState = "getReady";
+      
+      const delay = 500 + Math.random() * 1000; // between 0.5s and 1.5s
+      setTimeout(() => {
+        gameState = "active";
+        correctKeys.p1 = player1Keys[Math.floor(Math.random() * player1Keys.length)];
+        correctKeys.p2 = player2Keys[Math.floor(Math.random() * player2Keys.length)];
+        document.getElementById("display").innerHTML = 
+          `<span style="color: #e53935; margin-right: 50px;">${correctKeys.p1}</span>` + 
+          `<span style="color: #1e88e5;">${correctKeys.p2}</span>`;
+        startTime = performance.now();
+        reactionRecorded = { p1: false, p2: false };
+        
+        roundTimeout = setTimeout(() => {
+          endRound();
+        }, 4000);
+      }, delay);
+    }
+    
+    function endRound() {
+      clearTimeout(roundTimeout);
+      document.getElementById("display").textContent = "";
+      if(gameState !== "gameOver") {
+        setTimeout(startRound, 1000);
+      }
+    }
+    
+    /*************** Response Handlers ***************/
+    function applyWin(player) {
+      clearTimeout(roundTimeout);
+      const reactionTime = performance.now() - startTime;
+      if(player === "p1") {
+        document.getElementById("p1Reaction").textContent = Math.round(reactionTime);
+        linePosition = Math.min(linePosition + 10, 100);
+      } else {
+        document.getElementById("p2Reaction").textContent = Math.round(reactionTime);
+        linePosition = Math.max(linePosition - 10, 0);
+      }
+      updateUI();
+      checkGameOver();
+      if(gameState !== "gameOver") {
+        setTimeout(startRound, 1000);
+      }
+    }
+    
+    function applyPenalty(player) {
+      document.getElementById("message").textContent = 
+        player === "p1" ? "Player 1: Wrong key! -2.5% territory" : "Player 2: Wrong key! -2.5% territory";
+      if(player === "p1") {
+        linePosition = Math.max(linePosition - 2.5, 0);
+      } else {
+        linePosition = Math.min(linePosition + 2.5, 100);
+      }
+      updateUI();
+    }
+    
+    function checkGameOver() {
+      if(linePosition >= 100) {
+        showGameOver("Player 1");
+      } else if(linePosition <= 0) {
+        showGameOver("Player 2");
+      }
+    }
+    
+    function showGameOver(winner) {
+      gameState = "gameOver";
+      document.getElementById("gameOverText").textContent = winner + " Wins!";
+      document.getElementById("gameOverScreen").classList.add("active");
+    }
+    
+    /*************** Key Event Handler ***************/
+    document.addEventListener("keydown", (e) => {
+      if(e.code === "Space") {
+        // If game is over or waiting to start, reset the game and start a new round.
+        if(gameState === "waiting" || gameState === "gameOver") {
+          if(gameState === "gameOver") {
+            resetGame();
+          }
+          startRound();
+        }
+        return;
+      }
+      
+      if(gameState !== "active") return;
+      
+      const key = e.key.toUpperCase();
+      const isP1Key = player1Keys.includes(key);
+      const isP2Key = player2Keys.includes(key);
+      
+      if(!reactionRecorded.p1 && key === correctKeys.p1 && isP1Key) {
+        reactionRecorded.p1 = true;
+        applyWin("p1");
+      }
+      if(!reactionRecorded.p2 && key === correctKeys.p2 && isP2Key) {
+        reactionRecorded.p2 = true;
+        applyWin("p2");
+      }
+      
+      if(isP1Key && key !== correctKeys.p1) {
+        applyPenalty("p1");
+      }
+      if(isP2Key && key !== correctKeys.p2) {
+        applyPenalty("p2");
+      }
+    });
+    
+    updateUI();
+  </script>
+</body>
+</html>
+
+
