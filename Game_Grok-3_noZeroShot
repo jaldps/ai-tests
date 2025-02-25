@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reaction Time Showdown</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+        }
+        #playing-field {
+            position: relative;
+            width: 100vw;
+            height: 80vh;
+            overflow: hidden;
+        }
+        .side {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            transition: width 0.5s ease;
+        }
+        #player1-side {
+            left: 0;
+            background-color: rgba(255, 0, 0, 0.2);
+        }
+        #player2-side {
+            right: 0;
+            background-color: rgba(0, 0, 255, 0.2);
+        }
+        #divider {
+            position: absolute;
+            width: 2px;
+            background-color: #333;
+            top: 0;
+            bottom: 0;
+            left: 50%;
+            transition: left 0.5s ease;
+        }
+        .target {
+            font-size: 48px;
+            font-weight: bold;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        #target1 {
+            color: #d00;
+            left: 25%;
+        }
+        #target2 {
+            color: #00d;
+            right: 25%;
+        }
+        #message {
+            font-size: 24px;
+            margin: 20px 0;
+            color: #333;
+        }
+        #info {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        #info span {
+            margin: 0 15px;
+        }
+        #keyboard-info {
+            margin: 20px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        #keyboard-info p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="playing-field">
+        <div id="player1-side" class="side"></div>
+        <div id="divider"></div>
+        <div id="player2-side" class="side"></div>
+        <div id="target1" class="target"></div>
+        <div id="target2" class="target"></div>
+    </div>
+    <div id="message">Press spacebar to start</div>
+    <div id="info">
+        <span id="round">Round: 1</span>
+        <span id="score">Score: 50.0% - 50.0%</span>
+        <span id="reaction1">Player 1 RT: -</span>
+        <span id="reaction2">Player 2 RT: -</span>
+    </div>
+    <div id="keyboard-info">
+        <p>Player 1 (Red): 1, 2, 3, 4, Q, W, E, R, A, S, D, F, Z, X, C, V</p>
+        <p>Player 2 (Blue): 7, 8, 9, 0, U, I, O, P, H, J, K, L, B, N, M</p>
+        <p id="v-info">V is for Player 1</p>
+    </div>
+
+    <script>
+        // Game state variables
+        let P = 50; // Territory percentage for Player 1 (0 to 100)
+        let round = 1;
+        let state = 'waiting';
+        let player1Keys = [];
+        let player2Keys = [];
+        let targetKey1 = '';
+        let targetKey2 = '';
+        let startTime = 0;
+        let reactionTime1 = null;
+        let reactionTime2 = null;
+
+        // Base key sets (excluding V initially)
+        const basePlayer1Keys = ['1', '2', '3', '4', 'Q', 'W', 'E', 'R', 'A', 'S', 'D', 'F', 'Z', 'X', 'C'];
+        const basePlayer2Keys = ['7', '8', '9', '0', 'U', 'I', 'O', 'P', 'H', 'J', 'K', 'L', 'B', 'N', 'M'];
+
+        // DOM elements
+        const messageEl = document.getElementById('message');
+        const target1El = document.getElementById('target1');
+        const target2El = document.getElementById('target2');
+        const roundEl = document.getElementById('round');
+        const scoreEl = document.getElementById('score');
+        const reaction1El = document.getElementById('reaction1');
+        const reaction2El = document.getElementById('reaction2');
+        const vInfoEl = document.getElementById('v-info');
+
+        // Update the divider and side widths
+        function updateDivider(P) {
+            document.getElementById('player1-side').style.width = P + '%';
+            document.getElementById('player2-side').style.width = (100 - P) + '%';
+            document.getElementById('divider').style.left = P + '%';
+        }
+
+        // Update the info bar
+        function updateInfo() {
+            roundEl.textContent = `Round: ${round}`;
+            scoreEl.textContent = `Score: ${P.toFixed(1)}% - ${(100 - P).toFixed(1)}%`;
+            reaction1El.textContent = `Player 1 RT: ${reactionTime1 ? reactionTime1.toFixed(0) + 'ms' : '-'}`;
+            reaction2El.textContent = `Player 2 RT: ${reactionTime2 ? reactionTime2.toFixed(0) + 'ms' : '-'}`;
+        }
+
+        // Display temporary message
+        function showMessage(msg) {
+            messageEl.textContent = msg;
+            setTimeout(() => { messageEl.textContent = ''; }, 1000);
+        }
+
+        // Start the "Get Ready" phase
+        function startGetReady() {
+            state = 'getReady';
+            messageEl.textContent = 'Get Ready';
+            const delay = 500 + Math.random() * 1000; // 0.5 to 1.5 seconds
+            setTimeout(() => {
+                if (state === 'getReady') {
+                    startActive();
+                }
+            }, delay);
+        }
+
+        // Start the active phase of the round
+        function startActive() {
+            state = 'active';
+            messageEl.textContent = '';
+
+            // Assign V key randomly
+            const vForPlayer1 = Math.random() < 0.5;
+            player1Keys = [...basePlayer1Keys];
+            player2Keys = [...basePlayer2Keys];
+            if (vForPlayer1) {
+                player1Keys.push('V');
+                vInfoEl.textContent = 'V is for Player 1';
+            } else {
+                player2Keys.push('V');
+                vInfoEl.textContent = 'V is for Player 2';
+            }
+
+            // Select random target keys
+            targetKey1 = player1Keys[Math.floor(Math.random() * player1Keys.length)];
+            targetKey2 = player2Keys[Math.floor(Math.random() * player2Keys.length)];
+            target1El.textContent = targetKey1;
+            target2El.textContent = targetKey2;
+
+            // Record start time and set timeout
+            startTime = performance.now();
+            setTimeout(() => {
+                if (state === 'active') {
+                    endRound('timeout');
+                }
+            }, 4000); // 4-second timeout
+        }
+
+        // Apply penalty for wrong key press
+        function applyPenalty(player) {
+            if (player === 'player1') {
+                P -= 2.5;
+                if (P < 0) P = 0;
+            } else {
+                P += 2.5;
+                if (P > 100) P = 100;
+            }
+            updateDivider(P);
+            showMessage(`${player === 'player1' ? 'Player 1' : 'Player 2'} pressed wrong key!`);
+            updateInfo();
+        }
+
+        // End the round
+        function endRound(winner, reactionTime) {
+            state = 'roundEnd';
+            target1El.textContent = '';
+            target2El.textContent = '';
+
+            if (winner === 'player1') {
+                P += 10;
+                if (P > 100) P = 100;
+                reactionTime1 = reactionTime;
+                reactionTime2 = null;
+                showMessage('Player 1 wins the round!');
+            } else if (winner === 'player2') {
+                P -= 10;
+                if (P < 0) P = 0;
+                reactionTime1 = null;
+                reactionTime2 = reactionTime;
+                showMessage('Player 2 wins the round!');
+            } else {
+                reactionTime1 = null;
+                reactionTime2 = null;
+                showMessage('Timeout');
+            }
+
+            updateDivider(P);
+            updateInfo();
+
+            if (P <= 0 || P >= 100) {
+                setTimeout(gameOver, 1000);
+            } else {
+                setTimeout(startNextRound, 1000);
+            }
+        }
+
+        // Handle game over
+        function gameOver() {
+            state = 'gameOver';
+            const winner = P >= 100 ? 'Player 1' : 'Player 2';
+            messageEl.textContent = `Game Over! ${winner} wins!`;
+        }
+
+        // Start the next round
+        function startNextRound() {
+            round++;
+            updateInfo();
+            startGetReady();
+        }
+
+        // Handle key presses during active state
+        function handleActiveKeyPress(key) {
+            key = key.toUpperCase();
+            if (key === targetKey1) {
+                const reactionTime = performance.now() - startTime;
+                endRound('player1', reactionTime);
+            } else if (key === targetKey2) {
+                const reactionTime = performance.now() - startTime;
+                endRound('player2', reactionTime);
+            } else if (player1Keys.includes(key)) {
+                applyPenalty('player1');
+            } else if (player2Keys.includes(key)) {
+                applyPenalty('player2');
+            }
+        }
+
+        // Start the game
+        function startGame() {
+            state = 'getReady';
+            startGetReady();
+        }
+
+        // Reset the game
+        function resetGame() {
+            P = 50;
+            round = 1;
+            state = 'waiting';
+            reactionTime1 = null;
+            reactionTime2 = null;
+            target1El.textContent = '';
+            target2El.textContent = '';
+            updateDivider(P);
+            updateInfo();
+            messageEl.textContent = 'Press spacebar to start';
+        }
+
+        // Key event listener
+        document.addEventListener('keydown', (event) => {
+            if (event.key === ' ') {
+                event.preventDefault();
+            }
+            if (state === 'waiting' && event.key === ' ') {
+                startGame();
+            } else if (state === 'active') {
+                handleActiveKeyPress(event.key);
+            } else if (state === 'gameOver' && event.key === ' ') {
+                resetGame();
+            }
+        });
+
+        // Initialize the game
+        updateDivider(P);
+        updateInfo();
+    </script>
+</body>
+</html>
