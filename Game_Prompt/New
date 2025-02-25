@@ -1,0 +1,50 @@
+Prompt: 
+Create a two-player reaction time game where players compete to see who has the fastest reflexes. The game should follow these specific rules:
+
+Design a clean, professional interface with a playing field divided by a vertical line in the middle. The left side should be red-tinted for Player 1, and the right side should be blue-tinted for Player 2. The dividing line starts at the 50% mark.
+
+Gameplay mechanics:
+
+- The game should start when the spacebar is pressed
+
+- Each round starts with Players waiting during a "Get Ready" phase lasting between 0.5-1.5 seconds
+
+- After the random wait time, two letters/numbers appear simultaneously - one in red for Player 1 and one in blue for Player 2
+
+- Player 1 is assigned keys from the left side of the keyboard (1-4, Q-R, A-F, Z-V)
+
+- Player 2 is assigned keys from the right side (7-0, U-P, H-L, B-M)
+
+- The V key is shared between players and can be assigned to either player in any round
+
+- The first player to press their correct key wins the round and gains 10% territory (the dividing line moves away from them)
+
+- If a player presses any wrong key from their side, they receive a 2.5% territory penalty (line moves toward them) but the round continues
+
+- All line movements are cumulative - penalties affect the final position when correct keys are eventually pressed
+
+- The game continues round after round until one player controls the entire field (line reaches 0% or 100%)
+
+- When the game ends, display a "Game Over" screen showing the winner and final score
+
+- After the Game Over screen, Press spacebar to start a new game
+
+Interface requirements:
+
+- Display the current score for both players
+
+- Show the round number
+
+- Record and display each player's reaction time in milliseconds
+
+- Include a visual representation of the keyboard layout showing which player controls which keys
+
+- Show a brief message when players receive a wrong key penalty
+
+- Animate the dividing line movement smoothly, colors move with the line so players with more or less territory have more or less of their color 
+
+- Include a clear "Game Over" screen when one player wins
+
+The game should provide immediate feedback on keystrokes, have smooth animations for the dividing line, and maintain a sleek, modern aesthetic throughout. Make all text and UI elements easily readable and ensure the game state (waiting, active, results, game over) is always clear to both players.
+
+A new rounds starts after the correct key is pressed or after nobody presses the correct key in 4 seconds
