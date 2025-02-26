@@ -382,6 +382,8 @@
         let player2Key = null;
         let player1Time = null;
         let player2Time = null;
+        let player1Responded = false; // Track if player 1 has correctly responded
+        let player2Responded = false; // Track if player 2 has correctly responded
         let roundStartTime = null;
         let winner = null;
         let penalties = { player1: 0, player2: 0 };
@@ -530,6 +532,8 @@
             // Reset round state
             player1Time = null;
             player2Time = null;
+            player1Responded = false;
+            player2Responded = false;
             roundStartTime = null;
             penalties = { player1: 0, player2: 0 };
             winner = null;
@@ -613,10 +617,11 @@
             
             // Handle Player 1 keys
             if (player1Keys.includes(key)) {
-                if (key === player1Key) {
-                    // Correct key for Player 1
+                if (key === player1Key && !player1Responded) {
+                    // Correct key for Player 1 - but only if they haven't already responded
                     player1Time = reactionTime;
                     player1TimeDisplay.textContent = `${reactionTime}ms`;
+                    player1Responded = true; // Mark player 1 as having responded
                     
                     // Update best time
                     if (bestTimes.player1 === null || reactionTime < bestTimes.player1) {
@@ -625,7 +630,7 @@
                     }
                     
                     // Check if Player 2 already pressed their key
-                    if (player2Time === null) {
+                    if (!player2Responded) {
                         // Player 1 wins this round - divider moves right (INCREASING its position value)
                         // This gives more territory to Player 1 (left side)
                         dividerPosition = Math.min(100, dividerPosition + 10);
@@ -641,9 +646,13 @@
                             setTimeout(startRound, 1000);
                         }
                         updateDisplay();
+                    } else if (player2Responded) {
+                        // Both players have now responded, start a new round
+                        setTimeout(startRound, 1000);
                     }
-                } else if (player1Keys.includes(key) && key !== player2Key) {
+                } else if (player1Keys.includes(key) && key !== player2Key && !player1Responded) {
                     // Wrong key for Player 1 - they lose territory (divider moves left)
+                    // Only apply penalty if they haven't already responded correctly
                     dividerPosition = Math.max(0, dividerPosition - 2.5);
                     penalties.player1 += 2.5;
                     showWrongKeyMessage('player1');
@@ -653,10 +662,11 @@
             
             // Handle Player 2 keys
             if (player2Keys.includes(key)) {
-                if (key === player2Key) {
-                    // Correct key for Player 2
+                if (key === player2Key && !player2Responded) {
+                    // Correct key for Player 2 - but only if they haven't already responded
                     player2Time = reactionTime;
                     player2TimeDisplay.textContent = `${reactionTime}ms`;
+                    player2Responded = true; // Mark player 2 as having responded
                     
                     // Update best time
                     if (bestTimes.player2 === null || reactionTime < bestTimes.player2) {
@@ -665,7 +675,7 @@
                     }
                     
                     // Check if Player 1 already pressed their key
-                    if (player1Time === null) {
+                    if (!player1Responded) {
                         // Player 2 wins this round - divider moves left (DECREASING its position value)
                         // This gives more territory to Player 2 (right side)
                         dividerPosition = Math.max(0, dividerPosition - 10);
@@ -681,9 +691,13 @@
                             setTimeout(startRound, 1000);
                         }
                         updateDisplay();
+                    } else if (player1Responded) {
+                        // Both players have now responded, start a new round
+                        setTimeout(startRound, 1000);
                     }
-                } else if (player2Keys.includes(key) && key !== player1Key) {
+                } else if (player2Keys.includes(key) && key !== player1Key && !player2Responded) {
                     // Wrong key for Player 2 - they lose territory (divider moves right)
+                    // Only apply penalty if they haven't already responded correctly
                     dividerPosition = Math.min(100, dividerPosition + 2.5);
                     penalties.player2 += 2.5;
                     showWrongKeyMessage('player2');
