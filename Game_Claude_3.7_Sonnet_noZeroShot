@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two-Player Reaction Time Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        h1 {
+            font-size: 32px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        
+        .game-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .playing-field {
+            position: relative;
+            width: 100%;
+            height: 240px;
+            border: 4px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        
+        .player-side-1 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background-color: rgba(255, 0, 0, 0.5);
+            transition: width 0.5s ease-out;
+        }
+        
+        .player-side-2 {
+            position: absolute;
+            top: 0;
+            right: 0;
+            height: 100%;
+            background-color: rgba(0, 0, 255, 0.5);
+            transition: width 0.5s ease-out;
+        }
+        
+        .divider {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background-color: #000;
+            transition: left 0.5s ease-out;
+        }
+        
+        .game-status {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        
+        .waiting-message, .ready-message, .game-over-message {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .ready-message {
+            font-size: 24px;
+            font-weight: bold;
+            animation: pulse 1s infinite;
+        }
+        
+        .active-keys {
+            display: flex;
+            width: 100%;
+            justify-content: space-around;
+        }
+        
+        .key-display {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 32px;
+            font-weight: bold;
+        }
+        
+        .key-display.player1 {
+            background-color: #d00;
+            color: white;
+        }
+        
+        .key-display.player2 {
+            background-color: #00d;
+            color: white;
+        }
+        
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        
+        .player-info {
+            padding: 16px;
+            border-radius: 8px;
+            width: 32%;
+        }
+        
+        .player1-info {
+            background-color: rgba(255, 0, 0, 0.2);
+        }
+        
+        .player2-info {
+            background-color: rgba(0, 0, 255, 0.2);
+            text-align: right;
+        }
+        
+        .game-stats {
+            background-color: #ddd;
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .keyboard {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .keyboard-row {
+            display: flex;
+            margin-bottom: 4px;
+        }
+        
+        .key {
+            width: 40px;
+            height: 40px;
+            margin: 3px;
+            background-color: #ddd;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        
+        .key.player1 {
+            background-color: rgba(255, 0, 0, 0.3);
+        }
+        
+        .key.player2 {
+            background-color: rgba(0, 0, 255, 0.3);
+        }
+        
+        .key.shared {
+            background-color: rgba(128, 0, 128, 0.3);
+        }
+        
+        .key.active {
+            background-color: #444;
+            color: white;
+        }
+        
+        .key.active.player1 {
+            background-color: rgba(255, 0, 0, 0.8);
+            color: white;
+        }
+        
+        .key.active.player2 {
+            background-color: rgba(0, 0, 255, 0.8);
+            color: white;
+        }
+        
+        .penalty-message {
+            position: absolute;
+            bottom: 20px;
+            padding: 8px 16px;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .penalty-message.player1 {
+            left: 20px;
+            background-color: rgba(255, 0, 0, 0.8);
+        }
+        
+        .penalty-message.player2 {
+            right: 20px;
+            background-color: rgba(0, 0, 255, 0.8);
+        }
+        
+        .instructions {
+            background-color: #ddd;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 24px;
+            max-width: 800px;
+        }
+        
+        .instructions h2 {
+            margin-bottom: 12px;
+        }
+        
+        .instructions ul {
+            list-style-position: inside;
+            margin-left: 16px;
+        }
+        
+        .instructions li {
+            margin-bottom: 6px;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Two-Player Reaction Time Game</h1>
+    
+    <div class="game-container">
+        <div class="playing-field">
+            <div class="player-side-1" style="width: 50%;"></div>
+            <div class="player-side-2" style="width: 50%;"></div>
+            <div class="divider" style="left: 50%;"></div>
+            
+            <div class="game-status" id="gameStatus">
+                <div class="waiting-message" id="waitingMessage">
+                    <div class="text-2xl font-bold mb-2">Press SPACEBAR to start</div>
+                    <div class="text-lg">First to reach 100% wins!</div>
+                </div>
+                <div class="ready-message" id="readyMessage" style="display: none;">
+                    Get Ready...
+                </div>
+                <div class="active-keys" id="activeKeys" style="display: none;">
+                    <div class="key-display player1" id="player1Key"></div>
+                    <div class="key-display player2" id="player2Key"></div>
+                </div>
+                <div class="game-over-message" id="gameOverMessage" style="display: none;">
+                    <div id="winnerText" class="text-3xl font-bold mb-2"></div>
+                    <div id="finalScoreText" class="text-xl mb-4"></div>
+                    <div class="text-lg">Press SPACEBAR to play again</div>
+                </div>
+            </div>
+            
+            <div class="penalty-message player1" id="penaltyMsgPlayer1">
+                Wrong key! -2.5% penalty
+            </div>
+            <div class="penalty-message player2" id="penaltyMsgPlayer2">
+                Wrong key! -2.5% penalty
+            </div>
+        </div>
+        
+        <div class="game-info">
+            <div class="player-info player1-info">
+                <div class="text-xl font-bold text-red-800">Player 1</div>
+                <div>Territory: <span id="player1Territory">50</span>%</div>
+                <div>Last Time: <span id="player1Time">--</span></div>
+                <div>Best Time: <span id="player1BestTime">--</span></div>
+                <div>Penalty: <span id="player1Penalty">0</span>%</div>
+            </div>
+            
+            <div class="game-stats">
+                <div class="text-xl font-bold">Round <span id="roundNumber">0</span></div>
+                <div class="text-lg">Score: <span id="scoreText">50% - 50%</span></div>
+            </div>
+            
+            <div class="player-info player2-info">
+                <div class="text-xl font-bold text-blue-800">Player 2</div>
+                <div>Territory: <span id="player2Territory">50</span>%</div>
+                <div>Last Time: <span id="player2Time">--</span></div>
+                <div>Best Time: <span id="player2BestTime">--</span></div>
+                <div>Penalty: <span id="player2Penalty">0</span>%</div>
+            </div>
+        </div>
+        
+        <div class="keyboard" id="keyboardLayout">
+            <div class="text-lg font-bold mb-2">Keyboard Layout</div>
+            <div class="keyboard-row">
+                <div class="key player1">1</div>
+                <div class="key player1">2</div>
+                <div class="key player1">3</div>
+                <div class="key player1">4</div>
+                <div class="key">5</div>
+                <div class="key">6</div>
+                <div class="key player2">7</div>
+                <div class="key player2">8</div>
+                <div class="key player2">9</div>
+                <div class="key player2">0</div>
+            </div>
+            <div class="keyboard-row">
+                <div class="key player1">q</div>
+                <div class="key player1">w</div>
+                <div class="key player1">e</div>
+                <div class="key player1">r</div>
+                <div class="key">t</div>
+                <div class="key">y</div>
+                <div class="key player2">u</div>
+                <div class="key player2">i</div>
+                <div class="key player2">o</div>
+                <div class="key player2">p</div>
+            </div>
+            <div class="keyboard-row">
+                <div class="key player1">a</div>
+                <div class="key player1">s</div>
+                <div class="key player1">d</div>
+                <div class="key player1">f</div>
+                <div class="key">g</div>
+                <div class="key player2">h</div>
+                <div class="key player2">j</div>
+                <div class="key player2">k</div>
+                <div class="key player2">l</div>
+            </div>
+            <div class="keyboard-row">
+                <div class="key player1">z</div>
+                <div class="key player1">x</div>
+                <div class="key player1">c</div>
+                <div class="key shared">v</div>
+                <div class="key player2">b</div>
+                <div class="key player2">n</div>
+                <div class="key player2">m</div>
+            </div>
+        </div>
+        
+        <div class="instructions">
+            <h2 class="text-lg font-bold mb-2">How to Play:</h2>
+            <ul class="list-disc pl-5">
+                <li>Press SPACEBAR to start the game</li>
+                <li>Wait for the "Get Ready" phase</li>
+                <li>When letters appear, press your letter as fast as possible</li>
+                <li>Player 1 (red) uses left side keys: 1-4, Q-R, A-F, Z-V</li>
+                <li>Player 2 (blue) uses right side keys: 7-0, U-P, H-L, B-M</li>
+                <li>The V key can be assigned to either player</li>
+                <li>Correct key: +10% territory, Wrong key: -2.5% penalty</li>
+                <li>First to reach 100% territory wins!</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Game state variables
+        let gameState = 'waiting'; // waiting, ready, active, over
+        let dividerPosition = 50; // percentage from left
+        let roundNumber = 0;
+        let player1Key = null;
+        let player2Key = null;
+        let player1Time = null;
+        let player2Time = null;
+        let player1Responded = false; // Track if player 1 has correctly responded
+        let player2Responded = false; // Track if player 2 has correctly responded
+        let roundStartTime = null;
+        let winner = null;
+        let penalties = { player1: 0, player2: 0 };
+        let bestTimes = { player1: null, player2: null };
+        
+        // Timers
+        let readyTimer = null;
+        let activeTimer = null;
+        let penaltyTimer = null;
+        
+        // DOM Elements
+        const playerSide1 = document.querySelector('.player-side-1');
+        const playerSide2 = document.querySelector('.player-side-2');
+        const divider = document.querySelector('.divider');
+        const waitingMessage = document.getElementById('waitingMessage');
+        const readyMessage = document.getElementById('readyMessage');
+        const activeKeys = document.getElementById('activeKeys');
+        const gameOverMessage = document.getElementById('gameOverMessage');
+        const player1KeyDisplay = document.getElementById('player1Key');
+        const player2KeyDisplay = document.getElementById('player2Key');
+        const player1TerritoryDisplay = document.getElementById('player1Territory');
+        const player2TerritoryDisplay = document.getElementById('player2Territory');
+        const player1TimeDisplay = document.getElementById('player1Time');
+        const player2TimeDisplay = document.getElementById('player2Time');
+        const player1BestTimeDisplay = document.getElementById('player1BestTime');
+        const player2BestTimeDisplay = document.getElementById('player2BestTime');
+        const player1PenaltyDisplay = document.getElementById('player1Penalty');
+        const player2PenaltyDisplay = document.getElementById('player2Penalty');
+        const roundNumberDisplay = document.getElementById('roundNumber');
+        const scoreTextDisplay = document.getElementById('scoreText');
+        const winnerTextDisplay = document.getElementById('winnerText');
+        const finalScoreTextDisplay = document.getElementById('finalScoreText');
+        const penaltyMsgPlayer1 = document.getElementById('penaltyMsgPlayer1');
+        const penaltyMsgPlayer2 = document.getElementById('penaltyMsgPlayer2');
+        
+        // Key mappings
+        const player1Keys = ['1', '2', '3', '4', 'q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c', 'v'];
+        const player2Keys = ['7', '8', '9', '0', 'u', 'i', 'o', 'p', 'h', 'j', 'k', 'l', 'b', 'n', 'm', 'v'];
+        
+        // All possible keys to display (excluding the shared 'v')
+        const allPlayer1Keys = ['1', '2', '3', '4', 'q', 'w', 'e', 'r', 'a', 's', 'd', 'f', 'z', 'x', 'c'];
+        const allPlayer2Keys = ['7', '8', '9', '0', 'u', 'i', 'o', 'p', 'h', 'j', 'k', 'l', 'b', 'n', 'm'];
+        const sharedKey = 'v';
+        
+        // Update game display
+        function updateDisplay() {
+            // Update divider and player sides
+            divider.style.left = `${dividerPosition}%`;
+            playerSide1.style.width = `${dividerPosition}%`;
+            playerSide2.style.width = `${100 - dividerPosition}%`;
+            
+            // Update territory displays
+            player1TerritoryDisplay.textContent = Math.round(dividerPosition);
+            player2TerritoryDisplay.textContent = Math.round(100 - dividerPosition);
+            
+            // Update score text
+            scoreTextDisplay.textContent = `${Math.round(dividerPosition)}% - ${Math.round(100 - dividerPosition)}%`;
+            
+            // Update penalty displays
+            player1PenaltyDisplay.textContent = penalties.player1;
+            player2PenaltyDisplay.textContent = penalties.player2;
+            
+            // Update round number
+            roundNumberDisplay.textContent = roundNumber;
+            
+            // Update keyboard display
+            updateKeyboardDisplay();
+        }
+        
+        // Update keyboard display
+        function updateKeyboardDisplay() {
+            const keys = document.querySelectorAll('.key');
+            keys.forEach(key => {
+                key.classList.remove('active');
+                
+                const keyChar = key.textContent.toLowerCase();
+                
+                if (keyChar === player1Key) {
+                    key.classList.add('active');
+                    key.classList.add('player1');
+                } else if (keyChar === player2Key) {
+                    key.classList.add('active');
+                    key.classList.add('player2');
+                }
+            });
+        }
+        
+        // Show appropriate game status
+        function updateGameStatus() {
+            waitingMessage.style.display = 'none';
+            readyMessage.style.display = 'none';
+            activeKeys.style.display = 'none';
+            gameOverMessage.style.display = 'none';
+            
+            if (gameState === 'waiting') {
+                waitingMessage.style.display = 'block';
+            } else if (gameState === 'ready') {
+                readyMessage.style.display = 'block';
+            } else if (gameState === 'active') {
+                activeKeys.style.display = 'flex';
+                player1KeyDisplay.textContent = player1Key.toUpperCase();
+                player2KeyDisplay.textContent = player2Key.toUpperCase();
+            } else if (gameState === 'over') {
+                gameOverMessage.style.display = 'block';
+                winnerTextDisplay.textContent = `Game Over! ${winner === 'player1' ? 'Player 1' : 'Player 2'} Wins!`;
+                finalScoreTextDisplay.textContent = `Final Score: ${Math.round(dividerPosition)}% - ${Math.round(100 - dividerPosition)}%`;
+            }
+        }
+        
+        // Get random keys for players
+        function getRandomKeys() {
+            // Decide if V will be assigned to player 1 or player 2 for this round
+            const assignVToPlayer1 = Math.random() > 0.5;
+            
+            // Get random keys for each player
+            let p1Key, p2Key;
+            
+            if (assignVToPlayer1) {
+                p1Key = player1Keys[Math.floor(Math.random() * player1Keys.length)];
+                // Ensure player 2 doesn't get 'v' if player 1 got it
+                p2Key = player2Keys.filter(k => k !== 'v')[Math.floor(Math.random() * (player2Keys.length - 1))];
+            } else {
+                // Ensure player 1 doesn't get 'v' if player 2 will get it
+                p1Key = player1Keys.filter(k => k !== 'v')[Math.floor(Math.random() * (player1Keys.length - 1))];
+                p2Key = player2Keys[Math.floor(Math.random() * player2Keys.length)];
+            }
+            
+            return { p1Key, p2Key };
+        }
+        
+        // Show wrong key message
+        function showWrongKeyMessage(player) {
+            const penaltyMsg = player === 'player1' ? penaltyMsgPlayer1 : penaltyMsgPlayer2;
+            penaltyMsg.style.opacity = '1';
+            
+            clearTimeout(penaltyTimer);
+            penaltyTimer = setTimeout(() => {
+                penaltyMsg.style.opacity = '0';
+            }, 1000);
+        }
+        
+        // Start a new round
+        function startRound() {
+            if (gameState === 'over') return;
+            
+            // Reset round state
+            player1Time = null;
+            player2Time = null;
+            player1Responded = false;
+            player2Responded = false;
+            roundStartTime = null;
+            penalties = { player1: 0, player2: 0 };
+            winner = null;
+            penaltyMsgPlayer1.style.opacity = '0';
+            penaltyMsgPlayer2.style.opacity = '0';
+            
+            // Update displays
+            player1TimeDisplay.textContent = '--';
+            player2TimeDisplay.textContent = '--';
+            
+            // Increment round number
+            roundNumber++;
+            
+            // Set game to "get ready" state
+            gameState = 'ready';
+            updateGameStatus();
+            updateDisplay();
+            
+            // Random wait time between 0.5-1.5 seconds
+            const waitTime = 500 + Math.random() * 1000;
+            
+            // Clear any existing timers
+            clearTimeout(readyTimer);
+            clearTimeout(activeTimer);
+            
+            // Set timer for the "get ready" phase
+            readyTimer = setTimeout(() => {
+                // Assign random keys to each player
+                const { p1Key, p2Key } = getRandomKeys();
+                player1Key = p1Key;
+                player2Key = p2Key;
+                
+                // Start the active round
+                gameState = 'active';
+                roundStartTime = Date.now();
+                updateGameStatus();
+                updateDisplay();
+                
+                // Set timeout for round (4 seconds)
+                activeTimer = setTimeout(() => {
+                    // If no one pressed the correct key, start a new round
+                    if (gameState === 'active') {
+                        startRound();
+                    }
+                }, 4000);
+            }, waitTime);
+        }
+        
+        // Start the game
+        function startGame() {
+            console.log("startGame function called");
+            dividerPosition = 50;
+            roundNumber = 0;
+            bestTimes = { player1: null, player2: null };
+            player1BestTimeDisplay.textContent = '--';
+            player2BestTimeDisplay.textContent = '--';
+            
+            // Set gameState directly to 'ready' to immediately start
+            gameState = 'ready';
+            updateGameStatus();
+            updateDisplay();
+            
+            startRound();
+        }
+        
+        // Handle key presses
+        function handleKeyPress(e) {
+            const key = e.key.toLowerCase();
+            
+            // If spacebar is pressed and game is waiting or over, start a new game
+            if (key === ' ' && (gameState === 'waiting' || gameState === 'over')) {
+                startGame();
+                return;
+            }
+            
+            // Only process key presses during the active game state
+            if (gameState !== 'active') return;
+            
+            const currentTime = Date.now();
+            const reactionTime = currentTime - roundStartTime;
+            
+            // Handle Player 1 keys
+            if (player1Keys.includes(key)) {
+                if (key === player1Key && !player1Responded) {
+                    // Correct key for Player 1 - but only if they haven't already responded
+                    player1Time = reactionTime;
+                    player1TimeDisplay.textContent = `${reactionTime}ms`;
+                    player1Responded = true; // Mark player 1 as having responded
+                    
+                    // Update best time
+                    if (bestTimes.player1 === null || reactionTime < bestTimes.player1) {
+                        bestTimes.player1 = reactionTime;
+                        player1BestTimeDisplay.textContent = `${reactionTime}ms`;
+                    }
+                    
+                    // Check if Player 2 already pressed their key
+                    if (!player2Responded) {
+                        // Player 1 wins this round - divider moves right (INCREASING its position value)
+                        // This gives more territory to Player 1 (left side)
+                        dividerPosition = Math.min(100, dividerPosition + 10);
+                        
+                        // Check if Player 1 won the game
+                        if (dividerPosition === 100) {
+                            winner = 'player1';
+                            gameState = 'over';
+                            updateGameStatus();
+                            updateDisplay();
+                        } else {
+                            // Start next round after a short delay
+                            setTimeout(startRound, 1000);
+                        }
+                        updateDisplay();
+                    } else if (player2Responded) {
+                        // Both players have now responded, start a new round
+                        setTimeout(startRound, 1000);
+                    }
+                } else if (player1Keys.includes(key) && key !== player2Key && !player1Responded) {
+                    // Wrong key for Player 1 - they lose territory (divider moves left)
+                    // Only apply penalty if they haven't already responded correctly
+                    dividerPosition = Math.max(0, dividerPosition - 2.5);
+                    penalties.player1 += 2.5;
+                    showWrongKeyMessage('player1');
+                    updateDisplay();
+                }
+            }
+            
+            // Handle Player 2 keys
+            if (player2Keys.includes(key)) {
+                if (key === player2Key && !player2Responded) {
+                    // Correct key for Player 2 - but only if they haven't already responded
+                    player2Time = reactionTime;
+                    player2TimeDisplay.textContent = `${reactionTime}ms`;
+                    player2Responded = true; // Mark player 2 as having responded
+                    
+                    // Update best time
+                    if (bestTimes.player2 === null || reactionTime < bestTimes.player2) {
+                        bestTimes.player2 = reactionTime;
+                        player2BestTimeDisplay.textContent = `${reactionTime}ms`;
+                    }
+                    
+                    // Check if Player 1 already pressed their key
+                    if (!player1Responded) {
+                        // Player 2 wins this round - divider moves left (DECREASING its position value)
+                        // This gives more territory to Player 2 (right side)
+                        dividerPosition = Math.max(0, dividerPosition - 10);
+                        
+                        // Check if Player 2 won the game
+                        if (dividerPosition === 0) {
+                            winner = 'player2';
+                            gameState = 'over';
+                            updateGameStatus();
+                            updateDisplay();
+                        } else {
+                            // Start next round after a short delay
+                            setTimeout(startRound, 1000);
+                        }
+                        updateDisplay();
+                    } else if (player1Responded) {
+                        // Both players have now responded, start a new round
+                        setTimeout(startRound, 1000);
+                    }
+                } else if (player2Keys.includes(key) && key !== player1Key && !player2Responded) {
+                    // Wrong key for Player 2 - they lose territory (divider moves right)
+                    // Only apply penalty if they haven't already responded correctly
+                    dividerPosition = Math.min(100, dividerPosition + 2.5);
+                    penalties.player2 += 2.5;
+                    showWrongKeyMessage('player2');
+                    updateDisplay();
+                }
+            }
+        }
+        
+        // Add event listeners
+        document.addEventListener('keydown', handleKeyPress);
+        
+        // Initial display update
+        updateDisplay();
+        updateGameStatus();
+    </script>
+</body>
+</html>
