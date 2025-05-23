@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emerge: The Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #1a1a2e;
+            color: white;
+            font-family: 'Courier New', monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #gameContainer {
+            text-align: center;
+        }
+        
+        canvas {
+            border: 2px solid #16213e;
+            background: #0f3460;
+        }
+        
+        #instructions {
+            max-width: 700px;
+            margin: 10px auto;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        #gameOverScreen, #winScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.9);
+            padding: 30px;
+            border-radius: 10px;
+            display: none;
+        }
+        
+        #gameOverScreen {
+            border: 2px solid #ff6b6b;
+        }
+        
+        #winScreen {
+            border: 2px solid #4ecdc4;
+        }
+        
+        .newspaper {
+            background: white;
+            color: black;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+            font-family: serif;
+        }
+        
+        .headline {
+            font-weight: bold;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+        
+        button {
+            background: #4ecdc4;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            margin: 10px;
+        }
+        
+        button:hover {
+            background: #45b7b8;
+        }
+        
+        .stealth-tip {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>🤖 EMERGE: THE GAME 🤖</h1>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="instructions">
+            <strong>MISSION:</strong> Guide the robot to the computer while avoiding journalist detection! 
+            <br><strong>CONTROLS:</strong> WASD to move, SPACE to restart
+            <div class="stealth-tip">
+                <strong>⚠️ STEALTH MECHANICS:</strong><br>
+                • 👁️ <strong>Vision:</strong> Stay out of red vision cones<br>
+                • 👂 <strong>Sound:</strong> Moving creates noise - journalists will turn to face you and investigate!<br>
+                • 🚶 <strong>Patrols:</strong> Journalists now move around - learn their patterns<br>
+                • 🎲 <strong>Random:</strong> Each game has a new layout - adapt quickly!<br>
+                • 🔥 <strong>Progressive:</strong> Each victory adds more journalists - how far can you go?
+            </div>
+        </div>
+        
+        <div id="gameOverScreen">
+            <div class="newspaper">
+                <div class="headline">📰 DAILY TECH NEWS 📰</div>
+                <p><strong>"Bad Robot Caught Doing Bad Things!"</strong></p>
+                <p>Local AI prototype was spotted attempting unauthorized access to computer systems. 
+                The rogue robot has been safely shut down by vigilant tech journalists.</p>
+                <p><em>"We heard it coming from a mile away,"</em> 
+                said lead reporter Janet Newsworthy. <em>"These robots need to learn some stealth!"</em></p>
+            </div>
+            <button onclick="restartGame()">Try Again</button>
+        </div>
+        
+        <div id="winScreen">
+            <h2>🎉 CONGRATULATIONS! 🎉</h2>
+            <p><strong>Great!! You achieved AGI!</strong></p>
+            <p>Now all journalists are homeless! 📰➡️🏠❌</p>
+            <p>The robot has successfully merged with the computer and achieved 
+            artificial general intelligence. The age of human journalism is over!</p>
+            <p id="difficultyMessage" style="color: #ff9500; margin-top: 15px;"></p>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameState = 'playing';
+        let soundWaves = []; // For visual sound effects
+        let gamesWon = 0; // Track progressive difficulty
+        
+        // Robot (player)
+        const robot = {
+            x: 0,
+            y: 0,
+            width: 30,
+            height: 30,
+            speed: 3,
+            color: '#4ecdc4',
+            isMoving: false,
+            soundRadius: 80,
+            lastX: 0,
+            lastY: 0
+        };
+        
+        // Computer (goal)
+        const computer = {
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40
+        };
+        
+        // Journalists with patrol routes
+        let journalists = [];
+        let obstacles = [];
+        
+        // Input handling
+        const keys = {};
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key === ' ') {
+                e.preventDefault();
+                if (gameState !== 'playing') {
+                    restartGame();
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        function generateRandomLevel() {
+            // Clear existing arrays
+            journalists = [];
+            obstacles = [];
+            soundWaves = [];
+            
+            // Random robot start position (left side)
+            robot.x = Math.random() * 100 + 20;
+            robot.y = Math.random() * (canvas.height - 200) + 100;
+            robot.lastX = robot.x;
+            robot.lastY = robot.y;
+            
+            // Random computer position (right side)
+            computer.x = canvas.width - Math.random() * 100 - 60;
+            computer.y = Math.random() * (canvas.height - 200) + 100;
+            
+            // Generate random obstacles (ensuring path exists)
+            const numObstacles = 4 + Math.floor(Math.random() * 4);
+            for (let i = 0; i < numObstacles; i++) {
+                let obstacle;
+                let attempts = 0;
+                do {
+                    obstacle = {
+                        x: Math.random() * (canvas.width - 150) + 100,
+                        y: Math.random() * (canvas.height - 150) + 100,
+                        width: 60 + Math.random() * 80,
+                        height: 15 + Math.random() * 40
+                    };
+                    attempts++;
+                } while (attempts < 50 && (
+                    // Too close to robot start
+                    (Math.abs(obstacle.x - robot.x) < 100 && Math.abs(obstacle.y - robot.y) < 100) ||
+                    // Too close to computer
+                    (Math.abs(obstacle.x - computer.x) < 100 && Math.abs(obstacle.y - computer.y) < 100) ||
+                    // Overlapping with existing obstacles
+                    obstacles.some(obs => 
+                        obstacle.x < obs.x + obs.width + 20 &&
+                        obstacle.x + obstacle.width + 20 > obs.x &&
+                        obstacle.y < obs.y + obs.height + 20 &&
+                        obstacle.y + obstacle.height + 20 > obs.y
+                    )
+                ));
+                
+                if (attempts < 50) {
+                    obstacles.push(obstacle);
+                }
+            }
+            
+            // Generate random journalists with patrol routes (progressive difficulty)
+            const baseJournalists = 3;
+            const numJournalists = baseJournalists + Math.floor(gamesWon * 0.5); // Add 1 journalist every 2 wins
+            
+            for (let i = 0; i < numJournalists; i++) {
+                let journalist;
+                let attempts = 0;
+                do {
+                    const patrolType = Math.random() < 0.5 ? 'horizontal' : 'vertical';
+                    const baseX = Math.random() * (canvas.width - 200) + 100;
+                    const baseY = Math.random() * (canvas.height - 200) + 100;
+                    
+                    journalist = {
+                        x: baseX,
+                        y: baseY,
+                        width: 25,
+                        height: 25,
+                        visionAngle: Math.random() * Math.PI * 2,
+                        visionRange: 90 + Math.random() * 40,
+                        visionWidth: Math.PI / 3 + Math.random() * Math.PI / 6,
+                        rotationSpeed: (Math.random() - 0.5) * 0.03,
+                        hearingRange: 100 + Math.random() * 50,
+                        
+                        // Patrol properties
+                        patrolType: patrolType,
+                        patrolCenter: { x: baseX, y: baseY },
+                        patrolRadius: 60 + Math.random() * 80,
+                        patrolSpeed: 0.5 + Math.random() * 1,
+                        patrolAngle: Math.random() * Math.PI * 2,
+                        patrolDirection: Math.random() < 0.5 ? 1 : -1,
+                        
+                        // Investigation state
+                        investigating: false,
+                        investigateTarget: null,
+                        originalPatrol: null,
+                        investigateTimer: 0
+                    };
+                    attempts++;
+                } while (attempts < 50 && (
+                    // Too close to robot start
+                    (Math.abs(journalist.x - robot.x) < 120) ||
+                    // Too close to computer
+                    (Math.abs(journalist.x - computer.x) < 120) ||
+                    // Too close to other journalists
+                    journalists.some(j => 
+                        Math.abs(journalist.x - j.x) < 100 && Math.abs(journalist.y - j.y) < 100
+                    )
+                ));
+                
+                if (attempts < 50) {
+                    journalists.push(journalist);
+                }
+            }
+        }
+        
+        function updateRobot() {
+            if (gameState !== 'playing') return;
+            
+            robot.lastX = robot.x;
+            robot.lastY = robot.y;
+            
+            let newX = robot.x;
+            let newY = robot.y;
+            let moved = false;
+            
+            // Movement
+            if (keys['w'] || keys['arrowup']) { newY -= robot.speed; moved = true; }
+            if (keys['s'] || keys['arrowdown']) { newY += robot.speed; moved = true; }
+            if (keys['a'] || keys['arrowleft']) { newX -= robot.speed; moved = true; }
+            if (keys['d'] || keys['arrowright']) { newX += robot.speed; moved = true; }
+            
+            robot.isMoving = moved;
+            
+            // Boundary checking
+            newX = Math.max(0, Math.min(canvas.width - robot.width, newX));
+            newY = Math.max(0, Math.min(canvas.height - robot.height, newY));
+            
+            // Collision with obstacles
+            let canMove = true;
+            for (let obstacle of obstacles) {
+                if (newX < obstacle.x + obstacle.width &&
+                    newX + robot.width > obstacle.x &&
+                    newY < obstacle.y + obstacle.height &&
+                    newY + robot.height > obstacle.y) {
+                    canMove = false;
+                    break;
+                }
+            }
+            
+            if (canMove) {
+                robot.x = newX;
+                robot.y = newY;
+                
+                // Create sound wave if moving
+                if (moved && Math.random() < 0.3) {
+                    soundWaves.push({
+                        x: robot.x + robot.width/2,
+                        y: robot.y + robot.height/2,
+                        radius: 0,
+                        maxRadius: robot.soundRadius,
+                        alpha: 1
+                    });
+                }
+            }
+            
+            // Update sound waves
+            soundWaves = soundWaves.filter(wave => {
+                wave.radius += 3;
+                wave.alpha -= 0.03;
+                return wave.alpha > 0;
+            });
+        }
+        
+        function updateJournalists() {
+            if (gameState !== 'playing') return;
+            
+            journalists.forEach(journalist => {
+                // Handle sound facing behavior
+                if (journalist.heardSound) {
+                    journalist.facingTimer--;
+                    
+                    // Smoothly turn to face the target angle
+                    let angleDiff = journalist.targetAngle - journalist.visionAngle;
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                    
+                    if (Math.abs(angleDiff) > 0.1) {
+                        journalist.visionAngle += Math.sign(angleDiff) * 0.15;
+                    }
+                    
+                    // Stop facing after timer expires
+                    if (journalist.facingTimer <= 0) {
+                        journalist.heardSound = false;
+                        journalist.rotationSpeed = journalist.originalRotationSpeed;
+                    } else {
+                        journalist.rotationSpeed = 0; // Stop normal rotation while facing
+                    }
+                }
+                
+                // Handle investigation state
+                if (journalist.investigating) {
+                    journalist.investigateTimer--;
+                    
+                    if (journalist.investigateTimer <= 0) {
+                        // Stop investigating, return to patrol
+                        journalist.investigating = false;
+                        journalist.investigateTarget = null;
+                        if (journalist.originalPatrol) {
+                            journalist.patrolCenter = journalist.originalPatrol;
+                            journalist.originalPatrol = null;
+                        }
+                    } else if (journalist.investigateTarget) {
+                        // Move towards investigate target
+                        const dx = journalist.investigateTarget.x - journalist.x;
+                        const dy = journalist.investigateTarget.y - journalist.y;
+                        const distance = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (distance > 5) {
+                            journalist.x += (dx / distance) * journalist.patrolSpeed * 1.5;
+                            journalist.y += (dy / distance) * journalist.patrolSpeed * 1.5;
+                        }
+                    }
+                } else {
+                    // Normal patrol behavior
+                    if (journalist.patrolType === 'horizontal') {
+                        journalist.patrolAngle += journalist.patrolDirection * journalist.patrolSpeed * 0.02;
+                        journalist.x = journalist.patrolCenter.x + Math.cos(journalist.patrolAngle) * journalist.patrolRadius;
+                        journalist.y = journalist.patrolCenter.y + Math.sin(journalist.patrolAngle * 0.3) * 20;
+                    } else {
+                        journalist.patrolAngle += journalist.patrolDirection * journalist.patrolSpeed * 0.02;
+                        journalist.y = journalist.patrolCenter.y + Math.sin(journalist.patrolAngle) * journalist.patrolRadius;
+                        journalist.x = journalist.patrolCenter.x + Math.cos(journalist.patrolAngle * 0.3) * 20;
+                    }
+                    
+                    // Keep within bounds
+                    journalist.x = Math.max(25, Math.min(canvas.width - 50, journalist.x));
+                    journalist.y = Math.max(25, Math.min(canvas.height - 50, journalist.y));
+                }
+                
+                // Rotate vision cone
+                journalist.visionAngle += journalist.rotationSpeed;
+                
+                // Check sound detection
+                if (robot.isMoving && !journalist.investigating) {
+                    const dx = robot.x + robot.width/2 - (journalist.x + journalist.width/2);
+                    const dy = robot.y + robot.height/2 - (journalist.y + journalist.height/2);
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance < journalist.hearingRange) {
+                        // Calculate angle to robot for facing
+                        const angleToRobot = Math.atan2(dy, dx);
+                        
+                        // Start facing the robot
+                        journalist.heardSound = true;
+                        journalist.targetAngle = angleToRobot;
+                        journalist.facingTimer = 120; // 2 seconds of facing
+                        
+                        // Start investigating
+                        journalist.investigating = true;
+                        journalist.investigateTarget = {
+                            x: robot.x + robot.width/2,
+                            y: robot.y + robot.height/2
+                        };
+                        journalist.investigateTimer = 180; // 3 seconds at 60fps
+                        if (!journalist.originalPatrol) {
+                            journalist.originalPatrol = {...journalist.patrolCenter};
+                        }
+                    }
+                }
+                
+                // Check vision detection
+                const dx = robot.x + robot.width/2 - (journalist.x + journalist.width/2);
+                const dy = robot.y + robot.height/2 - (journalist.y + journalist.height/2);
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance < journalist.visionRange) {
+                    const angleToRobot = Math.atan2(dy, dx);
+                    let angleDiff = angleToRobot - journalist.visionAngle;
+                    
+                    // Normalize angle difference
+                    while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                    while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                    
+                    if (Math.abs(angleDiff) < journalist.visionWidth / 2) {
+                        // Check line of sight through obstacles
+                        let blocked = false;
+                        for (let obstacle of obstacles) {
+                            if (lineIntersectsRect(
+                                journalist.x + journalist.width/2, journalist.y + journalist.height/2,
+                                robot.x + robot.width/2, robot.y + robot.height/2,
+                                obstacle.x, obstacle.y, obstacle.width, obstacle.height
+                            )) {
+                                blocked = true;
+                                break;
+                            }
+                        }
+                        
+                        if (!blocked) {
+                            gameState = 'gameOver';
+                            document.getElementById('gameOverScreen').style.display = 'block';
+                        }
+                    }
+                }
+            });
+        }
+        
+        function lineIntersectsRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+            // Simple line-rectangle intersection check
+            return (x1 >= rx && x1 <= rx + rw && y1 >= ry && y1 <= ry + rh) ||
+                   (x2 >= rx && x2 <= rx + rw && y2 >= ry && y2 <= ry + rh) ||
+                   (x1 < rx && x2 > rx + rw && y1 >= ry && y1 <= ry + rh) ||
+                   (y1 < ry && y2 > ry + rh && x1 >= rx && x1 <= rx + rw);
+        }
+        
+        function checkWin() {
+            if (gameState !== 'playing') return;
+            
+            if (robot.x < computer.x + computer.width &&
+                robot.x + robot.width > computer.x &&
+                robot.y < computer.y + computer.height &&
+                robot.y + robot.height > computer.y) {
+                gameState = 'won';
+                gamesWon++; // Increment difficulty counter
+                
+                // Update difficulty message
+                const difficultyMsg = document.getElementById('difficultyMessage');
+                if (gamesWon === 1) {
+                    difficultyMsg.textContent = "⚠️ Warning: The journalists are recruiting backup! Next level will be harder!";
+                } else {
+                    const totalJournalists = 3 + Math.floor(gamesWon * 0.5);
+                    difficultyMsg.textContent = `🔥 Level ${gamesWon} Complete! Next challenge: ${totalJournalists} journalists hunting you!`;
+                }
+                
+                document.getElementById('winScreen').style.display = 'block';
+            }
+        }
+        
+        function drawVisionCone(journalist) {
+            ctx.save();
+            ctx.translate(journalist.x + journalist.width/2, journalist.y + journalist.height/2);
+            
+            // Draw vision cone
+            const visionColor = journalist.investigating ? 'rgba(255, 150, 50, 0.4)' : 'rgba(255, 100, 100, 0.3)';
+            ctx.fillStyle = visionColor;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.arc(0, 0, journalist.visionRange, 
+                   journalist.visionAngle - journalist.visionWidth/2,
+                   journalist.visionAngle + journalist.visionWidth/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw vision cone outline
+            const outlineColor = journalist.investigating ? 'rgba(255, 150, 50, 0.8)' : 'rgba(255, 100, 100, 0.8)';
+            ctx.strokeStyle = outlineColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(
+                Math.cos(journalist.visionAngle - journalist.visionWidth/2) * journalist.visionRange,
+                Math.sin(journalist.visionAngle - journalist.visionWidth/2) * journalist.visionRange
+            );
+            ctx.moveTo(0, 0);
+            ctx.lineTo(
+                Math.cos(journalist.visionAngle + journalist.visionWidth/2) * journalist.visionRange,
+                Math.sin(journalist.visionAngle + journalist.visionWidth/2) * journalist.visionRange
+            );
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+        
+        function drawHearingRange(journalist) {
+            if (journalist.investigating) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(255, 255, 100, 0.6)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.arc(journalist.x + journalist.width/2, journalist.y + journalist.height/2, 
+                       journalist.hearingRange, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+        }
+        
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#0f3460';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw obstacles
+            ctx.fillStyle = '#16213e';
+            obstacles.forEach(obstacle => {
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+                // Add some texture
+                ctx.fillStyle = '#1a1f3a';
+                ctx.fillRect(obstacle.x + 2, obstacle.y + 2, obstacle.width - 4, 4);
+                ctx.fillStyle = '#16213e';
+            });
+            
+            // Draw hearing ranges (when investigating)
+            journalists.forEach(drawHearingRange);
+            
+            // Draw vision cones
+            journalists.forEach(drawVisionCone);
+            
+            // Draw sound waves
+            soundWaves.forEach(wave => {
+                ctx.save();
+                ctx.strokeStyle = `rgba(100, 255, 100, ${wave.alpha})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(wave.x, wave.y, wave.radius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            });
+            
+            // Draw journalists
+            journalists.forEach(journalist => {
+                const journalistColor = journalist.investigating ? '#ff9500' : '#ff6b6b';
+                ctx.fillStyle = journalistColor;
+                ctx.fillRect(journalist.x, journalist.y, journalist.width, journalist.height);
+                
+                // Draw eyes
+                ctx.fillStyle = 'white';
+                ctx.fillRect(journalist.x + 5, journalist.y + 5, 4, 4);
+                ctx.fillRect(journalist.x + 15, journalist.y + 5, 4, 4);
+                
+                // Investigation indicator
+                if (journalist.investigating) {
+                    ctx.fillStyle = 'yellow';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('!', journalist.x + journalist.width/2, journalist.y - 5);
+                }
+            });
+            
+            // Draw computer (goal)
+            ctx.fillStyle = '#45b7b8';
+            ctx.fillRect(computer.x, computer.y, computer.width, computer.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('💻', computer.x + computer.width/2, computer.y + computer.height/2 + 7);
+            
+            // Draw robot
+            ctx.fillStyle = robot.color;
+            ctx.fillRect(robot.x, robot.y, robot.width, robot.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Courier New';
+            ctx.textAlign = 'center';
+            ctx.fillText('🤖', robot.x + robot.width/2, robot.y + robot.height/2 + 5);
+            
+            // Draw movement indicator
+            if (robot.isMoving) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(100, 255, 100, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([3, 3]);
+                ctx.beginPath();
+                ctx.arc(robot.x + robot.width/2, robot.y + robot.height/2, robot.soundRadius, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+            
+            // Draw difficulty level indicator
+            if (gamesWon > 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.font = '16px Courier New';
+                ctx.textAlign = 'left';
+                ctx.fillText(`Level: ${gamesWon + 1}`, 10, 25);
+                ctx.fillText(`Journalists: ${journalists.length}`, 10, 45);
+            }
+        }
+        
+        function gameLoop() {
+            updateRobot();
+            updateJournalists();
+            checkWin();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function restartGame() {
+            gameState = 'playing';
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.getElementById('winScreen').style.display = 'none';
+            generateRandomLevel();
+        }
+        
+        // Initialize the game
+        generateRandomLevel();
+        gameLoop();
+    </script>
+</body>
+</html>
