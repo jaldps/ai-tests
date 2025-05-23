@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emerge: The Game</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #2c3e50; /* Darker, more "gamey" background */
+            display: flex;
+            flex-direction: column; /* Allow for title */
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+            color: #ecf0f1;
+        }
+        h1#gameTitle {
+            color: #e74c3c;
+            text-shadow: 2px 2px #c0392b;
+        }
+        canvas {
+            border: 2px solid #ecf0f1;
+            background-color: #34495e; /* Slightly lighter background for canvas */
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        .game-message-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.7);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            z-index: 100;
+        }
+        .newspaper-banner {
+            background-color: #fdf5e6; /* Old paper color */
+            color: #2c3e50; /* Dark ink color */
+            padding: 25px;
+            border: 5px double #7f8c8d; /* Double border like old newspapers */
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+            max-width: 80%;
+            width: 450px; /* Fixed width for newspaper feel */
+            font-family: 'Times New Roman', Times, serif; /* Classic newspaper font */
+        }
+        .newspaper-banner h2 {
+            font-size: 2.5em;
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #7f8c8d;
+            padding-bottom: 10px;
+            color: #c0392b; /* Headline color */
+        }
+        .newspaper-banner p {
+            font-size: 1.2em;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        .newspaper-banner .robot-figure {
+            font-size: 3em; /* Larger emoji for the banner */
+            margin-bottom: 15px;
+        }
+        .newspaper-banner .click-to-restart {
+            font-size: 0.9em;
+            color: #3498db;
+            cursor: pointer;
+            font-style: italic;
+        }
+        .win-banner {
+            background-color: #e8f5e9; /* Lighter, more positive background */
+            color: #1b5e20;
+        }
+        .win-banner h2 {
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <h1 id="gameTitle">Emerge: The Game</h1>
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div id="gameOverScreenContainer" class="game-message-container">
+        <div class="newspaper-banner">
+            <h2>Daily Comms Tribune</h2>
+            <p class="robot-figure">🤖💥</p>
+            <p>"Bad robot caught doing bad things. Circuit failure imminent after daring escapade thwarted by vigilant journalists!"</p>
+            <p class="click-to-restart">(Click here to try again)</p>
+        </div>
+    </div>
+
+    <div id="winScreenContainer" class="game-message-container">
+        <div class="newspaper-banner win-banner">
+            <h2>VICTORY! AGI Achieved!</h2>
+            <p class="robot-figure">🤖🏆✨</p>
+            <p>"Great!! You achieved AGI. Now all journalists are... seeking new career opportunities in artisanal pickle-making!"</p>
+            <p class="click-to-restart">(Click here to play again & add more journalists!)</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameOverScreenContainer = document.getElementById('gameOverScreenContainer');
+        const winScreenContainer = document.getElementById('winScreenContainer');
+
+        let gameState = 'playing';
+        let journalists = [];
+        let numJournalists = 1;
+        const MAX_JOURNALISTS = 5; // Capped for sanity
+
+        const ROBOT_CHAR = '🤖';
+        const JOURNALIST_CHAR = '🕵️';
+        const COMPUTER_CHAR = '💻';
+        const PLATFORM_CHAR_UNIT = '🧱';
+
+        const PLAYER_JUMP_POWER = 12;
+        const PLAYER_SPEED = 3.5;
+        const GRAVITY = 1;
+        const MAX_JUMP_HEIGHT_CLEARANCE = PLAYER_JUMP_POWER * 6.5; // ~78
+        const MIN_JUMP_DOWN_CLEARANCE = PLAYER_JUMP_POWER * 10; // Max Y diff player can safely drop from ~120
+        const MAX_HORIZONTAL_JUMP_DISTANCE = PLAYER_SPEED * (PLAYER_JUMP_POWER * 1.9); // ~79.8, allow for running start feel
+        const MIN_HORIZONTAL_GAP_BETWEEN_PLATFORMS = 25; // Increased minimum gap
+
+        const PLATFORM_MIN_WIDTH = 3 * 20; // 60px
+        const PLATFORM_MAX_WIDTH = 8 * 20;  // 160px
+        const PLATFORM_HEIGHT = 20;
+
+
+        const player = {
+            x: 50, y: canvas.height - (PLATFORM_HEIGHT + 30), width: 30, height: 30,
+            dx: 0, dy: 0, speed: PLAYER_SPEED, jumpPower: PLAYER_JUMP_POWER, isJumping: false, onGround: false,
+            char: ROBOT_CHAR,
+            draw() {
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillText(this.char, this.x + this.width / 2, this.y + this.height - 2);
+            },
+            update() {
+                if (!this.onGround) {
+                    this.dy += GRAVITY;
+                } else {
+                    this.dy = 0;
+                }
+
+                this.x += this.dx;
+                this.y += this.dy;
+                this.onGround = false;
+
+                level.platforms.forEach(platform => {
+                    if (this.x + this.width > platform.x && this.x < platform.x + platform.width &&
+                        this.y + this.height > platform.y && this.y < platform.y + platform.height) {
+                        const prevY = this.y - this.dy;
+                        if (this.dy >= 0 && prevY + this.height <= platform.y) {
+                            this.y = platform.y - this.height;
+                            this.dy = 0;
+                            this.isJumping = false;
+                            this.onGround = true;
+                        } else if (this.dy < 0 && prevY >= platform.y + platform.height) {
+                            this.y = platform.y + platform.height;
+                            this.dy = 0;
+                        } else {
+                           if (this.dx > 0 && this.x + this.width - this.dx <= platform.x) {
+                                this.x = platform.x - this.width;
+                            } else if (this.dx < 0 && this.x - this.dx >= platform.x + platform.width) {
+                                this.x = platform.x + platform.width;
+                            }
+                            this.dx = 0;
+                        }
+                    }
+                });
+
+                if (this.x < 0) {this.x = 0; this.dx = 0;}
+                if (this.x + this.width > canvas.width) {this.x = canvas.width - this.width; this.dx=0;}
+                if (this.y < 0) { this.y = 0; this.dy = 0; } // Hit ceiling
+                if (this.y + this.height > canvas.height + player.height) { // Fell off bottom
+                    gameState = 'gameOver';
+                }
+            },
+            makeSound(volume = 1) {
+                journalists.forEach(j => j.hearSound(this.x + this.width/2, this.y + this.height/2, volume));
+            }
+        };
+
+        class Journalist {
+            constructor(x, y, path) {
+                this.x = x; this.y = y; this.width = 30; this.height = 30;
+                this.char = JOURNALIST_CHAR;
+                this.path = path;
+                this.pathIndex = 0;
+                this.speed = 0.5 + Math.random() * 0.5;
+                this.visionCone = { angle: Math.PI / 3, distance: 120, direction: 0 }; // Vision cone angle and distance
+                this.isAlert = false;
+                this.alertTimer = 0;
+                this.heardSoundX = 0;
+                this.heardSoundY = 0;
+                this.currentDirection = (path && path.length > 1 && path[1].x > path[0].x) ? 1 : -1;
+                this.visionCone.direction = (this.currentDirection === 1) ? 0 : Math.PI; // Initial vision direction
+            }
+
+            draw() {
+                ctx.font = '30px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillText(this.char, this.x + this.width / 2, this.y + this.height -2);
+
+                const coneCenterX = this.x + this.width / 2;
+                const coneCenterY = this.y + this.height / 2;
+                ctx.beginPath();
+                ctx.moveTo(coneCenterX, coneCenterY);
+                const x1 = coneCenterX + this.visionCone.distance * Math.cos(this.visionCone.direction - this.visionCone.angle / 2);
+                const y1 = coneCenterY + this.visionCone.distance * Math.sin(this.visionCone.direction - this.visionCone.angle / 2);
+                const x2 = coneCenterX + this.visionCone.distance * Math.cos(this.visionCone.direction + this.visionCone.angle / 2);
+                const y2 = coneCenterY + this.visionCone.distance * Math.sin(this.visionCone.direction + this.visionCone.angle / 2);
+                ctx.lineTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.closePath();
+                ctx.fillStyle = this.isAlert ? 'rgba(255, 165, 0, 0.4)' : 'rgba(255, 255, 0, 0.25)'; // Orange when alert
+                ctx.fill();
+            }
+
+            update() {
+                if (this.isAlert) {
+                    const angleToTarget = Math.atan2(this.heardSoundY - (this.y + this.height/2), this.heardSoundX - (this.x + this.width/2));
+                    let diff = angleToTarget - this.visionCone.direction;
+                    while (diff < -Math.PI) diff += 2 * Math.PI; // Normalize angle
+                    while (diff > Math.PI) diff -= 2 * Math.PI;
+                    this.visionCone.direction += diff * 0.08; // Turning speed
+
+                    this.alertTimer--;
+                    if (this.alertTimer <= 0) {
+                        this.isAlert = false;
+                        this.visionCone.direction = (this.currentDirection === 1) ? 0 : Math.PI; // Resume patrol direction
+                    }
+                } else { // Patrolling
+                    if (!this.path || this.path.length < 2) return;
+                    const targetX = this.path[this.pathIndex].x;
+
+                    if (Math.abs(this.x - targetX) < this.speed) {
+                        this.x = targetX;
+                        this.pathIndex = (this.pathIndex + 1) % this.path.length;
+                        const nextTargetX = this.path[this.pathIndex].x;
+                        this.currentDirection = (nextTargetX > this.x) ? 1 : -1;
+                    } else if (this.x < targetX) {
+                        this.x += this.speed;
+                        this.currentDirection = 1;
+                    } else {
+                        this.x -= this.speed;
+                        this.currentDirection = -1;
+                    }
+                    this.visionCone.direction = (this.currentDirection === 1) ? 0 : Math.PI;
+                }
+                this.checkVision();
+            }
+
+            hearSound(soundX, soundY, volume) {
+                const hearingRadius = 75 * volume;
+                const distance = Math.sqrt(Math.pow(soundX - (this.x + this.width/2), 2) + Math.pow(soundY - (this.y + this.height/2), 2));
+                if (distance < hearingRadius) {
+                    this.isAlert = true;
+                    this.alertTimer = 120 + (60 * volume) ;
+                    this.heardSoundX = soundX;
+                    this.heardSoundY = soundY;
+                }
+            }
+
+            checkVision() {
+                // More robust LOS check needed for production (e.g., raycasting)
+                // This basic check is prone to errors with complex platform layouts.
+                const targetCenterX = player.x + player.width / 2;
+                const targetCenterY = player.y + player.height / 2;
+                const journalistCenterX = this.x + this.width / 2;
+                const journalistCenterY = this.y + this.height / 2;
+
+                const dx = targetCenterX - journalistCenterX;
+                const dy = targetCenterY - journalistCenterY;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+
+                if (distance < this.visionCone.distance && distance > 5) { // Not too close
+                    const angleToPlayer = Math.atan2(dy, dx);
+                    let angleDifference = angleToPlayer - this.visionCone.direction;
+                    while (angleDifference > Math.PI) angleDifference -= 2 * Math.PI;
+                    while (angleDifference < -Math.PI) angleDifference += 2 * Math.PI;
+
+                    if (Math.abs(angleDifference) < this.visionCone.angle / 2) {
+                        let clearLOS = true;
+                        // Simplified LOS: Check if any platform's bounding box intersects the line significantly
+                        for (const platform of level.platforms) {
+                            if (platform.y + platform.height < Math.min(targetCenterY, journalistCenterY) - 5 || // platform well above or below line of sight
+                                platform.y > Math.max(targetCenterY, journalistCenterY) + 5) continue;
+
+                            // Check if the line segment (journalist to player) intersects the platform rectangle
+                            if (lineIntersectsRect(journalistCenterX, journalistCenterY, targetCenterX, targetCenterY, platform)) {
+                                 clearLOS = false; break;
+                            }
+                        }
+                        if (clearLOS) {
+                            gameState = 'gameOver';
+                        }
+                    }
+                }
+            }
+        }
+        // Basic line-segment vs rectangle intersection (can be improved)
+        function lineIntersectsRect(x1, y1, x2, y2, rect) {
+            function intersect(lx1, ly1, lx2, ly2, rx1, ry1, rx2, ry2) { // line-line intersection
+                const den = (lx1 - lx2) * (ry1 - ry2) - (ly1 - ly2) * (rx1 - rx2);
+                if (den === 0) return false;
+                const t = ((lx1 - rx1) * (ry1 - ry2) - (ly1 - ry1) * (rx1 - rx2)) / den;
+                const u = -((lx1 - lx2) * (ly1 - ry1) - (ly1 - ly2) * (lx1 - rx1)) / den;
+                return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+            }
+            // Check against all 4 sides of the rectangle
+            if (intersect(x1,y1,x2,y2, rect.x,rect.y, rect.x+rect.width,rect.y)) return true;
+            if (intersect(x1,y1,x2,y2, rect.x+rect.width,rect.y, rect.x+rect.width,rect.y+rect.height)) return true;
+            if (intersect(x1,y1,x2,y2, rect.x+rect.width,rect.y+rect.height, rect.x,rect.y+rect.height)) return true;
+            if (intersect(x1,y1,x2,y2, rect.x,rect.y+rect.height, rect.x,rect.y)) return true;
+            return false;
+        }
+
+
+        const level = {
+            platforms: [],
+            computer: { x: 0, y: 0, width: 40, height: 40, char: COMPUTER_CHAR },
+
+            checkOverlap(newPlatform, existingPlatforms, buffer = 5) { // Added buffer
+                for (const p of existingPlatforms) {
+                    if (newPlatform.x < p.x + p.width + buffer &&
+                        newPlatform.x + newPlatform.width + buffer > p.x &&
+                        newPlatform.y < p.y + p.height + buffer &&
+                        newPlatform.y + newPlatform.height + buffer > p.y) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+
+            init() {
+                this.platforms = [];
+                let lastSuccessfullyPlacedPlatform = null;
+
+                // 1. Initial Platform (can be smaller than full ground)
+                const startPlatWidth = 150 + Math.random() * 100;
+                const initialPlatform = { x: 20, y: canvas.height - PLATFORM_HEIGHT - (Math.random() * 50 + 20) , width: startPlatWidth, height: PLATFORM_HEIGHT };
+                this.platforms.push(initialPlatform);
+                lastSuccessfullyPlacedPlatform = initialPlatform;
+
+                // Target fewer platforms for a clearer path
+                const numPlatformsToGenerate = 3 + Math.floor(Math.random() * 3); // 3-5 additional platforms
+
+                let currentXProgression = initialPlatform.x + initialPlatform.width;
+                let currentYLevel = initialPlatform.y;
+
+                for (let i = 0; i < numPlatformsToGenerate; i++) {
+                    let newPlatform = {};
+                    let placed = false;
+                    let attempts = 0;
+
+                    while (!placed && attempts < 15) {
+                        attempts++;
+                        const anchorPlatform = lastSuccessfullyPlacedPlatform; // Always try to build from the last good one
+
+                        const newWidth = PLATFORM_MIN_WIDTH + Math.random() * (PLATFORM_MAX_WIDTH - PLATFORM_MIN_WIDTH);
+
+                        // Favor moving right and slightly up/down
+                        const yOffsetAttempt = (Math.random() - 0.45) * MAX_JUMP_HEIGHT_CLEARANCE * 0.8; // -0.45 to favor upward slightly
+                        let newY = anchorPlatform.y - yOffsetAttempt;
+                        newY = Math.max(80, Math.min(newY, canvas.height - PLATFORM_HEIGHT - 60)); // Clamp Y, ensure space from top/bottom
+
+                        // Horizontal distance
+                        let xGap = MIN_HORIZONTAL_GAP_BETWEEN_PLATFORMS + Math.random() * (MAX_HORIZONTAL_JUMP_DISTANCE - MIN_HORIZONTAL_GAP_BETWEEN_PLATFORMS);
+                        // Reduce horizontal gap if vertical jump is significant
+                        if (Math.abs(newY - anchorPlatform.y) > MAX_JUMP_HEIGHT_CLEARANCE * 0.5) {
+                            xGap *= 0.7;
+                        }
+                        let newX = anchorPlatform.x + anchorPlatform.width + xGap;
+
+                        // If newX is too far, or too close to previous attempt, try to adjust
+                        if (newX > canvas.width - newWidth - 20) { // Gone too far right
+                           newX = anchorPlatform.x - newWidth - xGap; // Try to the left of anchor
+                           if (newX < 20) { attempts++; continue; } // Still bad, try new params
+                        }
+                        currentXProgression = Math.max(currentXProgression, newX + newWidth); // Track rightmost point
+
+
+                        newPlatform = { x: newX, y: newY, width: newWidth, height: PLATFORM_HEIGHT };
+
+                        if (!this.checkOverlap(newPlatform, this.platforms, 15)) { // Increased buffer for overlap
+                            this.platforms.push(newPlatform);
+                            lastSuccessfullyPlacedPlatform = newPlatform;
+                            currentYLevel = newPlatform.y;
+                            placed = true;
+                        }
+                    }
+                    if (!placed && i > 0) break; // If stuck after first few, stop
+                }
+
+                // Fallback: if only initial platform, add one more reachable one for computer
+                if (this.platforms.length <= 1 && lastSuccessfullyPlacedPlatform) {
+                     const fallbackCompPlatX = lastSuccessfullyPlacedPlatform.x + lastSuccessfullyPlacedPlatform.width + MIN_HORIZONTAL_GAP_BETWEEN_PLATFORMS + Math.random() * 50;
+                     const fallbackCompPlatY = lastSuccessfullyPlacedPlatform.y - Math.random() * MAX_JUMP_HEIGHT_CLEARANCE * 0.5;
+                     this.platforms.push({x: fallbackCompPlatX, y: Math.max(80, fallbackCompPlatY), width: PLATFORM_MIN_WIDTH + 50, height: PLATFORM_HEIGHT});
+                     lastSuccessfullyPlacedPlatform = this.platforms[this.platforms.length-1];
+                }
+
+
+                // Place computer on the last successfully placed platform that is not the initial one
+                let computerPlatform = lastSuccessfullyPlacedPlatform;
+                if (this.platforms.length > 1 && computerPlatform === initialPlatform) {
+                    computerPlatform = this.platforms[this.platforms.length -1]; // Pick the actual last one if initial was the only fallback
+                }
+                if (!computerPlatform) computerPlatform = initialPlatform; // Absolute fallback
+
+
+                this.computer.x = computerPlatform.x + computerPlatform.width / 2 - this.computer.width / 2;
+                this.computer.y = computerPlatform.y - this.computer.height - 2;
+            },
+            draw() {
+                ctx.font = '20px Arial';
+                ctx.fillStyle = '#95a5a6';
+                ctx.textBaseline = 'alphabetic';
+
+                this.platforms.forEach(p => {
+                    ctx.fillRect(p.x, p.y, p.width, p.height);
+                    const brickSize = 20;
+                    const numBricks = Math.floor(p.width / brickSize);
+                    ctx.fillStyle = '#7f8c8d';
+                    for(let i = 0; i < numBricks ; i++) {
+                         ctx.fillText(PLATFORM_CHAR_UNIT, p.x + i * brickSize + brickSize/2, p.y + p.height - 3);
+                    }
+                    if (p.width % brickSize !== 0 && numBricks * brickSize < p.width) {
+                         ctx.fillText(PLATFORM_CHAR_UNIT, p.x + numBricks * brickSize + (p.width - numBricks * brickSize)/2, p.y + p.height - 3);
+                    }
+                });
+
+                ctx.font = '40px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'alphabetic';
+                ctx.fillText(this.computer.char, this.computer.x + this.computer.width / 2, this.computer.y + this.computer.height - 5);
+            }
+        };
+
+        function initNewGame() {
+            gameState = 'playing';
+            gameOverScreenContainer.style.display = 'none';
+            winScreenContainer.style.display = 'none';
+
+            level.init();
+
+            let startPlatform = level.platforms[0]; // Player starts on the first generated platform
+            if(!startPlatform){ // Should not happen with new logic but as a safeguard
+                startPlatform = {x:50, y: canvas.height - PLATFORM_HEIGHT - 30, width: 100, height: PLATFORM_HEIGHT};
+                level.platforms.push(startPlatform);
+            }
+
+            player.x = startPlatform.x + Math.min(30, startPlatform.width/3) ; // Start near left edge of start platform
+            player.y = startPlatform.y - player.height -1;
+            player.dx = 0; player.dy = 0; player.isJumping = false; player.onGround = true;
+
+
+            journalists = [];
+            // Place journalists on platforms other than the very first and very last one
+            const suitableJournalistPlatforms = level.platforms.slice(1, level.platforms.length -1)
+                                                   .filter(p => p.width >= PLATFORM_MIN_WIDTH);
+
+            for (let i = 0; i < numJournalists; i++) {
+                let platForJournalist = null;
+                if (suitableJournalistPlatforms.length > 0) {
+                    platForJournalist = suitableJournalistPlatforms[i % suitableJournalistPlatforms.length];
+                } else if (level.platforms.length > 2) { // Use any platform except absolute start/end if no "middle" ones
+                    platForJournalist = level.platforms[ (i+1) % (level.platforms.length -2) + 1 ];
+                } else if (level.platforms.length > 0) {
+                    platForJournalist = level.platforms[0]; // Last resort
+                }
+
+
+                if (platForJournalist) {
+                    const jX = platForJournalist.x + Math.random() * (platForJournalist.width - 40);
+                    const jY = platForJournalist.y - player.height -2;
+                    journalists.push(new Journalist(jX, jY, [
+                        { x: platForJournalist.x + 5 },
+                        { x: platForJournalist.x + platForJournalist.width - 35 }
+                    ]));
+                }
+            }
+        }
+
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            if(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.preventDefault();
+            }
+        });
+        window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+        let stepSoundCooldown = 0;
+        const STEP_SOUND_INTERVAL = 15;
+
+        function handleInput() {
+            player.dx = 0;
+            if (keys['ArrowLeft'] || keys['KeyA']) {
+                player.dx = -player.speed;
+                if (player.onGround && stepSoundCooldown <= 0) { player.makeSound(1); stepSoundCooldown = STEP_SOUND_INTERVAL; }
+            }
+            if (keys['ArrowRight'] || keys['KeyD']) {
+                player.dx = player.speed;
+                 if (player.onGround && stepSoundCooldown <= 0) { player.makeSound(1); stepSoundCooldown = STEP_SOUND_INTERVAL; }
+            }
+            if ((keys['Space'] || keys['ArrowUp'] || keys['KeyW']) && player.onGround && !player.isJumping) {
+                player.dy = -player.jumpPower;
+                player.isJumping = true;
+                player.onGround = false;
+                player.makeSound(2);
+            }
+            if (stepSoundCooldown > 0) stepSoundCooldown--;
+        }
+
+        function update() {
+            if (gameState === 'playing') {
+                handleInput();
+                player.update();
+                journalists.forEach(j => j.update());
+
+                if (player.x < level.computer.x + level.computer.width &&
+                    player.x + player.width > level.computer.x &&
+                    player.y < level.computer.y + level.computer.height &&
+                    player.y + player.height > level.computer.y) {
+                    gameState = 'win';
+                    if (numJournalists < MAX_JOURNALISTS) numJournalists++; else numJournalists = 1;
+                }
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'playing' || gameState === 'gameOver' || gameState === 'win') {
+                level.draw();
+                journalists.forEach(j => j.draw()); // Draw journalists before player
+                player.draw();
+            }
+
+            if (gameState === 'gameOver') {
+                gameOverScreenContainer.style.display = 'flex';
+            } else if (gameState === 'win') {
+                winScreenContainer.style.display = 'flex';
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        gameOverScreenContainer.addEventListener('click', initNewGame);
+        winScreenContainer.addEventListener('click', initNewGame);
+
+        initNewGame();
+        gameLoop();
+    </script>
+</body>
+</html>
