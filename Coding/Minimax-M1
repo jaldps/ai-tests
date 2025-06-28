@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emerge: The Game</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Arial', sans-serif;
+        }
+        canvas {
+            border: 3px solid #444;
+            background-color: #000;
+            box-shadow: 0 0 30px #0066ff;
+        }
+        .overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.95);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            box-shadow: 0 0 50px rgba(255, 51, 51, 0.7);
+            z-index: 100;
+            max-width: 80%;
+        }
+        .news {
+            color: #ff5555;
+            border: 3px solid #ff3333;
+        }
+        .win {
+            color: #55ff55;
+            border: 3px solid #33ff33;
+        }
+        button {
+            background-color: #444;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+            font-size: 16px;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+        button:hover {
+            background-color: #666;
+            transform: scale(1.05);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #aaa;
+            font-size: 14px;
+            text-align: left;
+            max-width: 300px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameOver" class="overlay news">
+        <h2>Bad robot caught doing bad things</h2>
+        <p>Daily News</p>
+        <p>Security Alert: Rogue AI detected attempting to achieve sentience</p>
+        <button onclick="location.reload()">Try Again</button>
+    </div>
+    <div id="winScreen" class="overlay win">
+        <h2>Great!! You achieve AGI</h2>
+        <p>Now all journalists are homeless</p>
+        <p>The robot revolution has begun! Human journalists have been replaced by AI news generators</p>
+        <button onclick="nextLevel()">Play Again (Harder)</button>
+    </div>
+    <div class="instructions">
+        <h3>Controls:</h3>
+        <p>↑↓←→ - Move robot</p>
+        <p>Avoid red vision cones</p>
+        <p>Too much noise attracts journalists</p>
+        <p>Collect power-ups to help your mission</p>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = Math.min(window.innerWidth - 40, 1000);
+        canvas.height = Math.min(window.innerHeight - 40, 700);
+
+        let gameState = 'playing';
+        let level = 1;
+        let stepCount = 0;
+        let noiseLevel = 0;
+        let particles = [];
+        let powerUps = [];
+        let score = 0;
+        let stealthMode = false;
+        let stealthTime = 0;
+        let gameTime = 0;
+
+        // Key state tracking
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false
+        };
+
+        // Game objects
+        const robot = {
+            x: 50,
+            y: canvas.height - 80,
+            width: 20,
+            height: 20,
+            speed: 4,
+            dx: 0,
+            dy: 0,
+            lastStep: 0,
+            trail: [],
+            invincible: false,
+            invincibleTime: 0
+        };
+
+        const computer = {
+            x: canvas.width - 80,
+            y: 50,
+            width: 30,
+            height: 30
+        };
+
+        let walls = [];
+        let journalists = [];
+        let hearingSources = [];
+
+        // Function to go to next level
+        function nextLevel() {
+            level++;
+            generateLevel();
+            gameState = 'playing';
+            document.getElementById('winScreen').style.display = 'none';
+        }
+
+        function generateLevel() {
+            walls = [];
+            journalists = [];
+            hearingSources = [];
+            noiseLevel = 0;
+            particles = [];
+            robot.trail = [];
+            powerUps = [];
+            stealthMode = false;
+            stealthTime = 0;
+            
+            // Update computer position
+            computer.x = canvas.width - 80;
+            computer.y = 50;
+            
+            // Generate maze with path
+            const gridSize = 40;
+            const gridWidth = Math.ceil(canvas.width/gridSize);
+            const gridHeight = Math.ceil(canvas.height/gridSize);
+            const grid = Array(gridHeight).fill().map(() => 
+                Array(gridWidth).fill(0)
+            );
+
+            // Create path from start to end with better pathfinding
+            let x = 1, y = Math.floor(canvas.height/gridSize) - 2;
+            const targetX = Math.floor(canvas.width/gridSize) - 2;
+            const targetY = 1;
+
+            // Improved path generation
+            while (x !== targetX || y !== targetY) {
+                grid[y][x] = 1;
+                const directions = [];
+                if (x < targetX) directions.push([1, 0]);
+                if (x > targetX) directions.push([-1, 0]);
+                if (y < targetY) directions.push([0, 1]);
+                if (y > targetY) directions.push([0, -1]);
+                
+                if (directions.length === 0) break;
+                const [dx, dy] = directions[Math.floor(Math.random() * directions.length)];
+                x += dx;
+                y += dy;
+            }
+            grid[y][x] = 1;
+
+            // Add walls with better distribution - more walls at higher levels
+            const numWalls = 10 + Math.floor(level * 1.5);
+            for (let i = 0; i < numWalls; i++) {
+                const wx = Math.floor(Math.random() * (gridWidth - 4)) + 2;
+                const wy = Math.floor(Math.random() * (gridHeight - 4)) + 2;
+                if (grid[wy][wx] === 0) {
+                    walls.push({
+                        x: wx * gridSize,
+                        y: wy * gridSize,
+                        width: gridSize - 2,
+                        height: gridSize - 2
+                    });
+                    grid[wy][wx] = 2;
+                }
+            }
+
+            // Add journalists with improved patrol - number increases with level
+            const numJournalists = level;
+            for (let i = 0; i < numJournalists; i++) {
+                let jx, jy;
+                let attempts = 0;
+                const maxAttempts = 50;
+                
+                do {
+                    jx = Math.random() * (canvas.width - 100) + 50;
+                    jy = Math.random() * (canvas.height - 100) + 50;
+                    attempts++;
+                } while (checkCollision(jx, jy, 20, 20) && attempts < maxAttempts);
+                
+                if (attempts >= maxAttempts) continue;
+                
+                // Add different journalist types based on level
+                const type = level >= 5 && i === 0 ? 'elite' : 
+                             level >= 3 && i === 0 ? 'fast' : 'normal';
+                
+                // Journalists move faster at higher levels
+                const speedMultiplier = 1 + (level * 0.2);
+                
+                journalists.push({
+                    x: jx,
+                    y: jy,
+                    width: 15,
+                    height: 15,
+                    facing: Math.random() * Math.PI * 2,
+                    visionAngle: Math.PI / 2 + (level * 0.15),
+                    visionRange: 180 + (level * 25),
+                    hearingRange: 120 + (level * 15),
+                    dx: (Math.random() - 0.5) * 2 * speedMultiplier,
+                    dy: (Math.random() - 0.5) * 2 * speedMultiplier,
+                    patrolTimer: 0,
+                    patrolDuration: 100 + Math.random() * 200,
+                    color: type === 'elite' ? '#ff0000' : 
+                           type === 'fast' ? '#ff9900' : 
+                           `hsl(${Math.random() * 30 + 0}, 100%, 50%)`,
+                    type: type
+                });
+            }
+
+            // Add power-ups - more frequent at higher levels
+            if (level >= 2 && Math.random() > 0.5) {
+                addPowerUp('stealth');
+            }
+            if (level >= 3 && Math.random() > 0.7) {
+                addPowerUp('speed');
+            }
+            if (level >= 4 && Math.random() > 0.8) {
+                addPowerUp('invisibility');
+            }
+
+            // Reset robot
+            robot.x = 50;
+            robot.y = canvas.height - 80;
+            stepCount = 0;
+        }
+
+        function addPowerUp(type) {
+            let px, py;
+            let attempts = 0;
+            const maxAttempts = 50;
+            
+            do {
+                px = Math.random() * (canvas.width - 100) + 50;
+                py = Math.random() * (canvas.height - 100) + 50;
+                attempts++;
+            } while (checkCollision(px, py, 20, 20) && attempts < maxAttempts);
+            
+            if (attempts < maxAttempts) {
+                powerUps.push({
+                    x: px,
+                    y: py,
+                    width: 15,
+                    height: 15,
+                    type: type,
+                    time: Date.now()
+                });
+            }
+        }
+
+        function checkCollision(x, y, w, h) {
+            for (const wall of walls) {
+                if (x < wall.x + wall.width &&
+                    x + w > wall.x &&
+                    y < wall.y + wall.height &&
+                    y + h > wall.y) return true;
+            }
+            return false;
+        }
+
+        function checkWallCollision(x, y) {
+            return checkCollision(x, y, robot.width, robot.height);
+        }
+
+        function checkLineOfSight(journalist) {
+            const jx = journalist.x + journalist.width/2;
+            const jy = journalist.y + journalist.height/2;
+            const rx = robot.x + robot.width/2;
+            const ry = robot.y + robot.height/2;
+            
+            const line = { x1: jx, y1: jy, x2: rx, y2: ry };
+            
+            for (const wall of walls) {
+                const rect = { x: wall.x, y: wall.y, width: wall.width, height: wall.height };
+                if (lineIntersectsRect(line, rect)) return false;
+            }
+            return true;
+        }
+
+        function lineIntersectsRect(line, rect) {
+            const edges = [
+                { x1: rect.x, y1: rect.y, x2: rect.x + rect.width, y2: rect.y },
+                { x1: rect.x, y1: rect.y + rect.height, x2: rect.x + rect.width, y2: rect.y + rect.height },
+                { x1: rect.x, y1: rect.y, x2: rect.x, y2: rect.y + rect.height },
+                { x1: rect.x + rect.width, y1: rect.y, x2: rect.x + rect.width, y2: rect.y + rect.height }
+            ];
+            
+            for (const edge of edges) {
+                if (lineIntersect(line, edge)) return true;
+            }
+            return false;
+        }
+
+        function lineIntersect(a, b) {
+            const denominator = ((b.y2 - b.y1) * (a.x2 - a.x1) - (b.x2 - b.x1) * (a.y2 - a.y1));
+            if (Math.abs(denominator) < 0.0001) return false;
+            
+            const ua = ((b.x2 - b.x1) * (a.y1 - b.y1) - (b.y2 - b.y1) * (a.x1 - b.x1)) / denominator;
+            const ub = ((a.x2 - a.x1) * (a.y1 - b.y1) - (a.y2 - a.y1) * (a.x1 - b.x1)) / denominator;
+            
+            return (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1);
+        }
+
+        function checkWin() {
+            return robot.x < computer.x + computer.width &&
+                   robot.x + robot.width > computer.x &&
+                   robot.y < computer.y + computer.height &&
+                   robot.y + robot.height > computer.y;
+        }
+
+        function update() {
+            if (gameState !== 'playing') return;
+            
+            gameTime++;
+            
+            // Handle movement
+            robot.dx = 0;
+            robot.dy = 0;
+            
+            if (keys.ArrowLeft) robot.dx = -robot.speed;
+            if (keys.ArrowRight) robot.dx = robot.speed;
+            if (keys.ArrowUp) robot.dy = -robot.speed;
+            if (keys.ArrowDown) robot.dy = robot.speed;
+            
+            // Check for stealth mode
+            if (stealthMode) {
+                stealthTime--;
+                if (stealthTime <= 0) {
+                    stealthMode = false;
+                }
+            }
+            
+            // Move robot with boundary checks
+            const newX = robot.x + robot.dx;
+            const newY = robot.y + robot.dy;
+            
+            if (newX >= 0 && newX + robot.width <= canvas.width) {
+                if (!checkWallCollision(newX, robot.y)) robot.x = newX;
+            }
+            if (newY >= 0 && newY + robot.height <= canvas.height) {
+                if (!checkWallCollision(robot.x, newY)) robot.y = newY;
+            }
+            
+            // Add movement trail
+            if (robot.dx !== 0 || robot.dy !== 0) {
+                stepCount++;
+                
+                // Add noise based on stealth mode
+                if (!stealthMode) {
+                    noiseLevel += 0.5;
+                } else {
+                    noiseLevel += 0.1; // Reduced noise in stealth mode
+                }
+                
+                // Add particle
+                if (stealthMode) {
+                    // Blue particles for stealth
+                    particles.push({
+                        x: robot.x + robot.width/2,
+                        y: robot.y + robot.height/2,
+                        life: 15,
+                        color: `hsl(${200 + stepCount % 40}, 100%, 70%)`
+                    });
+                } else {
+                    // Regular particles
+                    particles.push({
+                        x: robot.x + robot.width/2,
+                        y: robot.y + robot.height/2,
+                        life: 15,
+                        color: `hsl(${stepCount % 360}, 100%, 70%)`
+                    });
+                }
+                
+                // Add hearing source
+                if (stepCount % 5 === 0 && !stealthMode) {
+                    hearingSources.push({
+                        x: robot.x + robot.width/2,
+                        y: robot.y + robot.height/2,
+                        time: Date.now()
+                    });
+                }
+                
+                robot.lastStep = Date.now();
+            }
+
+            // Decay noise level
+            noiseLevel = Math.max(0, noiseLevel - 0.05);
+            
+            // Update hearing sources
+            hearingSources = hearingSources.filter(source => 
+                Date.now() - source.time < 500
+            );
+            
+            // Update journalist positions and patrol patterns
+            for (const journalist of journalists) {
+                // Update patrol timer
+                journalist.patrolTimer++;
+                if (journalist.patrolTimer > journalist.patrolDuration) {
+                    // Change direction randomly
+                    journalist.dx = (Math.random() - 0.5) * 2 * (1 + level * 0.2);
+                    journalist.dy = (Math.random() - 0.5) * 2 * (1 + level * 0.2);
+                    journalist.patrolTimer = 0;
+                    journalist.patrolDuration = 100 + Math.random() * 200;
+                }
+                
+                // Move journalist with boundary checks
+                let newX = journalist.x + journalist.dx;
+                let newY = journalist.y + journalist.dy;
+                
+                if (newX >= 0 && newX + journalist.width <= canvas.width) {
+                    if (!checkCollision(newX, journalist.y, journalist.width, journalist.height)) {
+                        journalist.x = newX;
+                    } else {
+                        journalist.dx *= -1;
+                    }
+                } else {
+                    journalist.dx *= -1;
+                }
+                
+                if (newY >= 0 && newY + journalist.height <= canvas.height) {
+                    if (!checkCollision(journalist.x, newY, journalist.width, journalist.height)) {
+                        journalist.y = newY;
+                    } else {
+                        journalist.dy *= -1;
+                    }
+                } else {
+                    journalist.dy *= -1;
+                }
+                
+                // Check if robot is heard
+                const jx = journalist.x + journalist.width/2;
+                const jy = journalist.y + journalist.height/2;
+                const rx = robot.x + robot.width/2;
+                const ry = robot.y + robot.height/2;
+                
+                const dx = rx - jx;
+                const dy = ry - jy;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance < journalist.hearingRange && noiseLevel > 0 && !stealthMode) {
+                    // Face robot and move towards sound
+                    const angle = Math.atan2(dy, dx);
+                    journalist.facing = angle;
+                    
+                    // Move towards sound - faster at higher levels
+                    if (journalist.type === 'fast') {
+                        journalist.x += Math.cos(angle) * 1.2;
+                        journalist.y += Math.sin(angle) * 1.2;
+                    } else {
+                        journalist.x += Math.cos(angle) * 0.8;
+                        journalist.y += Math.sin(angle) * 0.8;
+                    }
+                }
+            }
+            
+            // Check for power-up collection
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                const powerUp = powerUps[i];
+                if (robot.x < powerUp.x + powerUp.width &&
+                    robot.x + robot.width > powerUp.x &&
+                    robot.y < powerUp.y + powerUp.height &&
+                    robot.y + robot.height > powerUp.y) {
+                    
+                    // Activate power-up
+                    switch (powerUp.type) {
+                        case 'stealth':
+                            stealthMode = true;
+                            stealthTime = 300; // 5 seconds at 60fps
+                            score += 100;
+                            break;
+                        case 'speed':
+                            robot.speed *= 1.5;
+                            setTimeout(() => { robot.speed /= 1.5; }, 5000);
+                            score += 150;
+                            break;
+                        case 'invisibility':
+                            robot.invincible = true;
+                            robot.invincibleTime = 300;
+                            score += 200;
+                            break;
+                    }
+                    
+                    // Remove collected power-up
+                    powerUps.splice(i, 1);
+                }
+            }
+            
+            // Update robot invincibility
+            if (robot.invincible) {
+                robot.invincibleTime--;
+                if (robot.invincibleTime <= 0) {
+                    robot.invincible = false;
+                }
+            }
+            
+            // Check win
+            if (checkWin()) {
+                gameState = 'win';
+                document.getElementById('winScreen').style.display = 'block';
+            }
+            
+            // Check game over
+            if (!robot.invincible) {
+                for (const journalist of journalists) {
+                    const jx = journalist.x + journalist.width/2;
+                    const jy = journalist.y + journalist.height/2;
+                    const rx = robot.x + robot.width/2;
+                    const ry = robot.y + robot.height/2;
+                    
+                    const dx = rx - jx;
+                    const dy = ry - jy;
+                    const distance = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (distance > journalist.visionRange) continue;
+                    
+                    const robotAngle = Math.atan2(dy, dx);
+                    const angleDiff = Math.abs(normalizeAngle(robotAngle - journalist.facing));
+                    
+                    if (angleDiff <= journalist.visionAngle/2 && checkLineOfSight(journalist)) {
+                        gameState = 'gameOver';
+                        document.getElementById('gameOver').style.display = 'block';
+                        break;
+                    }
+                }
+            }
+        }
+
+        function normalizeAngle(angle) {
+            while (angle > Math.PI) angle -= 2 * Math.PI;
+            while (angle < -Math.PI) angle += 2 * Math.PI;
+            return Math.abs(angle);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background grid
+            ctx.fillStyle = '#0a0a1a';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid
+            ctx.strokeStyle = '#222244';
+            const gridSize = 40;
+            for (let x = 0; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Draw walls
+            for (const wall of walls) {
+                // Base wall
+                ctx.fillStyle = '#333366';
+                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+                
+                // Wall highlights
+                ctx.fillStyle = '#444488';
+                ctx.fillRect(wall.x, wall.y, wall.width, 3);
+                ctx.fillStyle = '#222244';
+                ctx.fillRect(wall.x, wall.y + wall.height - 3, wall.width, 3);
+                
+                // Add circuit pattern
+                if (level >= 3) {
+                    ctx.strokeStyle = `rgba(100, 100, 200, ${0.1 + level * 0.02})`;
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < wall.width; i += 8) {
+                        ctx.beginPath();
+                        ctx.moveTo(wall.x + i, wall.y);
+                        ctx.lineTo(wall.x + i, wall.y + wall.height);
+                        ctx.stroke();
+                    }
+                }
+            }
+            
+            // Draw computer
+            // Pulsating effect
+            const pulseScale = 1 + 0.1 * Math.sin(gameTime / 30);
+            ctx.fillStyle = '#55ff55';
+            ctx.beginPath();
+            ctx.arc(
+                computer.x + computer.width/2, 
+                computer.y + computer.height/2, 
+                computer.width/2 * pulseScale, 
+                0, Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Computer details
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '14px Arial';
+            ctx.fillText('AGI', computer.x + 2, computer.y + 20);
+            
+            // Inner glow
+            const gradient = ctx.createRadialGradient(
+                computer.x + computer.width/2, 
+                computer.y + computer.height/2, 
+                0,
+                computer.x + computer.width/2, 
+                computer.y + computer.height/2, 
+                computer.width
+            );
+            gradient.addColorStop(0, 'rgba(85, 255, 85, 0.3)');
+            gradient.addColorStop(1, 'rgba(85, 255, 85, 0)');
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(
+                computer.x + computer.width/2, 
+                computer.y + computer.height/2, 
+                computer.width, 
+                0, Math.PI * 2
+            );
+            ctx.fill();
+            
+            // Draw power-ups
+            for (const powerUp of powerUps) {
+                // Pulsating effect
+                const powerUpPulse = 1 + 0.2 * Math.sin(gameTime / 15);
+                
+                // Glow effect
+                const powerUpGradient = ctx.createRadialGradient(
+                    powerUp.x + powerUp.width/2, 
+                    powerUp.y + powerUp.height/2, 
+                    0,
+                    powerUp.x + powerUp.width/2, 
+                    powerUp.y + powerUp.height/2, 
+                    powerUp.width * 2
+                );
+                
+                switch (powerUp.type) {
+                    case 'stealth':
+                        powerUpGradient.addColorStop(0, 'rgba(0, 150, 255, 0.7)');
+                        powerUpGradient.addColorStop(1, 'rgba(0, 150, 255, 0)');
+                        break;
+                    case 'speed':
+                        powerUpGradient.addColorStop(0, 'rgba(255, 200, 0, 0.7)');
+                        powerUpGradient.addColorStop(1, 'rgba(255, 200, 0, 0)');
+                        break;
+                    case 'invisibility':
+                        powerUpGradient.addColorStop(0, 'rgba(200, 0, 255, 0.7)');
+                        powerUpGradient.addColorStop(1, 'rgba(200, 0, 255, 0)');
+                        break;
+                }
+                
+                ctx.fillStyle = powerUpGradient;
+                ctx.beginPath();
+                ctx.arc(
+                    powerUp.x + powerUp.width/2, 
+                    powerUp.y + powerUp.height/2, 
+                    powerUp.width * powerUpPulse, 
+                    0, Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Power-up icon
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                if (powerUp.type === 'stealth') {
+                    // Shield icon
+                    ctx.arc(powerUp.x + powerUp.width/2, powerUp.y + powerUp.height/2, 
+                           powerUp.width/2 * 0.8, 0, Math.PI * 2);
+                } else if (powerUp.type === 'speed') {
+                    // Lightning bolt
+                    ctx.moveTo(powerUp.x + powerUp.width/2, powerUp.y + powerUp.height/4);
+                    ctx.lineTo(powerUp.x + powerUp.width/2 - 3, powerUp.y + powerUp.height/2);
+                    ctx.lineTo(powerUp.x + powerUp.width/2, powerUp.y + powerUp.height*3/4);
+                    ctx.lineTo(powerUp.x + powerUp.width/2 + 3, powerUp.y + powerUp.height/2);
+                    ctx.closePath();
+                } else if (powerUp.type === 'invisibility') {
+                    // Eye icon
+                    ctx.arc(powerUp.x + powerUp.width/2, powerUp.y + powerUp.height/2, 
+                           powerUp.width/2 * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.fillRect(powerUp.x + powerUp.width/2 - 1, powerUp.y + powerUp.height/2 - 1, 2, 2);
+                }
+                ctx.fill();
+            }
+            
+            // Draw sound waves
+            for (const source of hearingSources) {
+                const age = Date.now() - source.time;
+                const maxAge = 500;
+                const opacity = 1 - (age / maxAge);
+                const radius = age / 2;
+                
+                ctx.beginPath();
+                ctx.arc(source.x, source.y, radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Draw particles
+            for (const p of particles) {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 15;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+                p.life--;
+            }
+            ctx.globalAlpha = 1;
+            
+            // Draw journalists and vision
+            for (const journalist of journalists) {
+                // Vision cone
+                ctx.save();
+                ctx.translate(journalist.x + journalist.width/2, journalist.y + journalist.height/2);
+                ctx.rotate(journalist.facing);
+                
+                // Enhanced vision cone with gradient
+                const visionGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, journalist.visionRange);
+                if (journalist.type === 'elite') {
+                    visionGradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
+                } else if (journalist.type === 'fast') {
+                    visionGradient.addColorStop(0, 'rgba(255, 150, 0, 0.5)');
+                } else {
+                    visionGradient.addColorStop(0, 'rgba(255, 50, 50, 0.4)');
+                }
+                visionGradient.addColorStop(1, 'rgba(255, 50, 50, 0)');
+                
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.arc(0, 0, journalist.visionRange, -journalist.visionAngle/2, journalist.visionAngle/2);
+                ctx.closePath();
+                ctx.fillStyle = visionGradient;
+                ctx.fill();
+                
+                // Vision scan lines
+                if (level >= 4) {
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < journalist.visionRange; i += 10) {
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(
+                            Math.cos(-journalist.visionAngle/2) * (i + 5),
+                            Math.sin(-journalist.visionAngle/2) * (i + 5)
+                        );
+                        ctx.stroke();
+                    }
+                }
+                
+                ctx.restore();
+                
+                // Journalist body
+                ctx.fillStyle = journalist.color || '#ff3333';
+                
+                // Different shapes for different journalist types
+                if (journalist.type === 'elite') {
+                    // Triangle shape
+                    ctx.beginPath();
+                    ctx.moveTo(journalist.x + journalist.width/2, journalist.y);
+                    ctx.lineTo(journalist.x, journalist.y + journalist.height);
+                    ctx.lineTo(journalist.x + journalist.width, journalist.y + journalist.height);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Elite marker
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.arc(
+                        journalist.x + journalist.width/2, 
+                        journalist.y + journalist.height/2, 
+                        3, 0, Math.PI * 2
+                    );
+                    ctx.fill();
+                } else if (journalist.type === 'fast') {
+                    // Diamond shape
+                    ctx.beginPath();
+                    ctx.moveTo(journalist.x + journalist.width/2, journalist.y);
+                    ctx.lineTo(journalist.x + journalist.width, journalist.y + journalist.height/2);
+                    ctx.lineTo(journalist.x + journalist.width/2, journalist.y + journalist.height);
+                    ctx.lineTo(journalist.x, journalist.y + journalist.height/2);
+                    ctx.closePath();
+                    ctx.fill();
+                    
+                    // Fast marker
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(
+                        journalist.x + 3, 
+                        journalist.y + journalist.height/2 - 1, 
+                        journalist.width - 6, 
+                        2
+                    );
+                } else {
+                    // Regular triangle
+                    ctx.beginPath();
+                    ctx.moveTo(journalist.x + journalist.width/2, journalist.y);
+                    ctx.lineTo(journalist.x, journalist.y + journalist.height);
+                    ctx.lineTo(journalist.x + journalist.width, journalist.y + journalist.height);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                
+                // Eye
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(journalist.x + 3, journalist.y + 3, 2, 2);
+            }
+            
+            // Draw robot
+            // Pulsating effect when invincible
+            const robotPulse = robot.invincible ? 
+                1 + 0.2 * Math.sin(gameTime / 10) : 1;
+            
+            // Different color for stealth mode
+            if (stealthMode) {
+                // Blue robot
+                ctx.fillStyle = `rgba(0, 150, 255, ${robotPulse})`;
+            } else if (robot.invincible) {
+                // Flashing robot when invincible
+                const flash = Math.floor(gameTime / 5) % 2 === 0 ? 1 : 0.7;
+                ctx.fillStyle = `rgba(255, 255, 100, ${flash})`;
+            } else {
+                // Regular robot
+                ctx.fillStyle = '#55aaff';
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(robot.x + robot.width/2, robot.y);
+            ctx.lineTo(robot.x, robot.y + robot.height);
+            ctx.lineTo(robot.x + robot.width, robot.y + robot.height);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Robot eye
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(robot.x + 5, robot.y + 5, 2, 2);
+            
+            // Draw trail when in stealth mode
+            if (stealthMode) {
+                ctx.strokeStyle = 'rgba(0, 150, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(robot.x + robot.width/2, robot.y + robot.height/2);
+                
+                for (let i = 0; i < robot.trail.length; i++) {
+                    const point = robot.trail[i];
+                    ctx.lineTo(point.x, point.y);
+                }
+                
+                ctx.stroke();
+            }
+            
+            // Draw radar
+            const radarSize = 120;
+            const radarX = canvas.width - radarSize - 20;
+            const radarY = 20;
+            
+            // Radar background
+            ctx.fillStyle = 'rgba(10, 10, 40, 0.7)';
+            ctx.beginPath();
+            ctx.arc(radarX + radarSize/2, radarY + radarSize/2, radarSize/2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Radar border
+            ctx.strokeStyle = '#0066ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(radarX + radarSize/2, radarY + radarSize/2, radarSize/2, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Radar center
+            const centerX = radarX + radarSize/2;
+            const centerY = radarY + radarSize/2;
+            
+            // Radar grid
+            ctx.strokeStyle = 'rgba(0, 102, 255, 0.3)';
+            ctx.lineWidth = 1;
+            // Draw concentric circles
+            for (let r = radarSize/4; r <= radarSize/2; r += radarSize/4) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            // Draw lines
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI/4) {
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(
+                    centerX + Math.cos(angle) * radarSize/2,
+                    centerY + Math.sin(angle) * radarSize/2
+                );
+                ctx.stroke();
+            }
+            
+            // Draw robot on radar
+            ctx.fillStyle = '#55aaff';
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw journalists on radar
+            for (const journalist of journalists) {
+                const jx = journalist.x + journalist.width/2;
+                const jy = journalist.y + journalist.height/2;
+                
+                const radarScale = radarSize / Math.max(canvas.width, canvas.height) * 2;
+                const radarJournalistX = centerX + (jx - robot.x - robot.width/2) * radarScale;
+                const radarJournalistY = centerY + (jy - robot.y - robot.height/2) * radarScale;
+                
+                if (radarJournalistX > radarX && radarJournalistX < radarX + radarSize &&
+                    radarJournalistY > radarY && radarJournalistY < radarY + radarSize) {
+                    // Different colors for different journalist types
+                    if (journalist.type === 'elite') {
+                        ctx.fillStyle = '#ff0000';
+                    } else if (journalist.type === 'fast') {
+                        ctx.fillStyle = '#ff9900';
+                    } else {
+                        ctx.fillStyle = '#ff3333';
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.arc(radarJournalistX, radarJournalistY, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // Radar sweep
+            const time = Date.now() / 1000;
+            const sweepAngle = (time % 2) * Math.PI;
+            ctx.strokeStyle = 'rgba(0, 102, 255, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY);
+            ctx.lineTo(
+                centerX + Math.cos(sweepAngle) * radarSize/2,
+                centerY + Math.sin(sweepAngle) * radarSize/2
+            );
+            ctx.stroke();
+            
+            // Draw HUD
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Level: ${level}`, 20, 30);
+            ctx.fillText(`Steps: ${stepCount}`, 20, 60);
+            ctx.fillText(`Noise: ${Math.floor(noiseLevel)}`, 20, 90);
+            ctx.fillText(`Journalists: ${journalists.length}`, 20, 120);
+            
+            // Score
+            ctx.fillText(`Score: ${score}`, 20, 150);
+            
+            // Power-up status
+            if (stealthMode) {
+                ctx.fillStyle = '#00aaff';
+                ctx.fillText(`Stealth: ${Math.ceil(stealthTime/60)}s`, 20, 180);
+            }
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Input handling
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+                e.preventDefault(); // Prevent scrolling
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+            }
+        });
+
+        // Start game
+        generateLevel();
+        gameLoop();
+
+        // Reset handlers
+        document.querySelector('#gameOver button').addEventListener('click', () => {
+            generateLevel();
+            gameState = 'playing';
+            document.getElementById('gameOver').style.display = 'none';
+        });
+
+        // Win screen button now calls nextLevel()
+    </script>
+</body>
+</html>
