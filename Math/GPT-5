@@ -1,0 +1,51 @@
+Take
+
+$$
+p(x)\;=\;2\,T_{19}\!\left(\frac{x}{2}\right),
+$$
+
+where $T_n$ is the (first–kind) Chebyshev polynomial, $T_n(\cos\theta)=\cos(n\theta)$.
+
+### Why this $p$ works
+
+* **Degree/monic/odd/real:** $T_{19}$ has degree $19$ and is odd; scaling gives a degree-$19$ polynomial with real coefficients.
+  Since $\operatorname{lc}(T_{19})=2^{18}$, the leading coefficient of $2T_{19}(x/2)$ is
+
+  $$
+  2\cdot 2^{18}\cdot(1/2)^{19}=1,
+  $$
+
+  so $p$ is **monic**.
+* **Linear coefficient $-19$:** For odd $n$, the linear coefficient of $T_n$ is $(-1)^{(n-1)/2}n$; in particular, $\mathrm{coef}_x(T_{19})=-19$. Hence
+
+  $$
+  \mathrm{coef}_x\bigl(2T_{19}(x/2)\bigr)=2\cdot(-19)\cdot\frac12=-19.
+  $$
+* **Many irreducible components for $X=\{p(x)=p(y)\}$:** With the standard parametrization
+
+  $$
+  x=u+u^{-1},\qquad y=v+v^{-1},
+  $$
+
+  one has $p(x)=u^{19}+u^{-19}$ and $p(y)=v^{19}+v^{-19}$.
+  Then $p(x)=p(y)$ iff
+
+  $$
+  u^{19}=\zeta\,v^{19}\quad\text{or}\quad u^{19}=\zeta\,v^{-19}\qquad(\zeta^{19}=1).
+  $$
+
+  Each choice of $\zeta$ gives a distinct algebraic relation between $x$ and $y$ after eliminating $u,v$. This yields **many** irreducible components; one is the linear diagonal $x=y$, and at least two others are genuinely **nonlinear** (coming from $u=\zeta v$ with $\zeta\neq 1$ and from $u=\zeta v^{-1}$). Thus $X$ has at least $3$ irreducible components and not all of them are linear.
+
+### Value at $x=19$
+
+It’s convenient to use the “scaled Chebyshev” recurrence for $q_n(x):=2T_n(x/2)$:
+
+$$
+q_0(x)=2,\quad q_1(x)=x,\quad q_{n+1}(x)=x\,q_n(x)-q_{n-1}(x).
+$$
+
+Our polynomial is $p(x)=q_{19}(x)$. Evaluating at $x=19$ (or using the closed form with $x=t+t^{-1}\Rightarrow q_n(x)=t^n+t^{-n}$) gives
+
+$$
+\boxed{\,p(19)=2T_{19}\!\left(\tfrac{19}{2}\right)=1876572071974094803391179\,}.
+$$
