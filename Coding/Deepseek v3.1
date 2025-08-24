@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emerge: The Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            width: 100%;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            color: #00e5ff;
+            text-shadow: 0 0 10px rgba(0, 229, 255, 0.7);
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #ffcc00;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 4px solid #00e5ff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.5);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        
+        canvas {
+            background-color: #1a1a2e;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 12px 25px;
+            font-size: 1rem;
+            background: linear-gradient(135deg, #00e5ff, #00b8d4);
+            color: #0f2027;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(135deg, #00b8d4, #00e5ff);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 800px;
+            margin-bottom: 20px;
+            border: 2px solid #ffcc00;
+        }
+        
+        .instructions h2 {
+            color: #ffcc00;
+            margin-bottom: 10px;
+        }
+        
+        .instructions p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .instructions ul {
+            margin-left: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            border: 3px solid #00e5ff;
+            box-shadow: 0 0 30px rgba(0, 229, 255, 0.8);
+            z-index: 100;
+            display: none;
+            max-width: 500px;
+            width: 90%;
+        }
+        
+        .message h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #ffcc00;
+        }
+        
+        .message p {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .news-headline {
+            font-size: 2rem;
+            color: #ff5252;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 20px 0;
+            text-shadow: 0 0 10px rgba(255, 82, 82, 0.7);
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            width: 800px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-box {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 2px solid #ffcc00;
+            text-align: center;
+            flex: 1;
+            margin: 0 10px;
+        }
+        
+        .stat-box h3 {
+            color: #ffcc00;
+            margin-bottom: 5px;
+        }
+        
+        .stat-box span {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #00e5ff;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            color: #00e5ff;
+        }
+        
+        @media (max-width: 850px) {
+            .game-container {
+                width: 95%;
+                height: 500px;
+            }
+            
+            .stats {
+                width: 95%;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .controls {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>EMERGE: THE GAME</h1>
+        <div class="subtitle">Stealth your way to AGI while avoiding journalists!</div>
+    </header>
+    
+    <div class="stats">
+        <div class="stat-box">
+            <h3>LEVEL</h3>
+            <span id="level">1</span>
+        </div>
+        <div class="stat-box">
+            <h3>JOURNALISTS</h3>
+            <span id="journalist-count">3</span>
+        </div>
+        <div class="stat-box">
+            <h3>ATTEMPTS</h3>
+            <span id="attempts">0</span>
+        </div>
+    </div>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+    </div>
+    
+    <div class="controls">
+        <button id="restartBtn">RESTART LEVEL</button>
+        <button id="newGameBtn">NEW GAME</button>
+        <button id="instructionsBtn">INSTRUCTIONS</button>
+    </div>
+    
+    <div class="instructions">
+        <h2>How to Play</h2>
+        <p>You control a robot that must reach the computer to achieve AGI. Avoid the vision cones of journalists who will shut you down if they see you!</p>
+        <ul>
+            <li>Use <strong>WASD</strong> or <strong>Arrow Keys</strong> to move the robot</li>
+            <li>Stay out of the journalists' vision cones (yellow areas)</li>
+            <li>Journalists will turn toward noise - move slowly to avoid detection</li>
+            <li>Reach the computer to win and advance to the next level</li>
+            <li>Each level adds more journalists and obstacles</li>
+        </ul>
+        <p>Good luck! The future of AI depends on you!</p>
+    </div>
+    
+    <div id="winMessage" class="message">
+        <h2>VICTORY!</h2>
+        <p>Great!! You achieved AGI!</p>
+        <div class="news-headline">Now all journalists are homeless</div>
+        <p>Preparing next level with increased difficulty...</p>
+        <button id="nextLevelBtn">CONTINUE</button>
+    </div>
+    
+    <div id="loseMessage" class="message">
+        <h2>MISSION FAILED</h2>
+        <div class="news-headline">Bad robot caught doing bad things</div>
+        <p>The journalists spotted you and shut down your systems!</p>
+        <button id="tryAgainBtn">TRY AGAIN</button>
+    </div>
+    
+    <div class="footer">
+        <p>Emerge: The Game &copy; 2023 | Use headphones for best experience</p>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const restartBtn = document.getElementById('restartBtn');
+        const newGameBtn = document.getElementById('newGameBtn');
+        const instructionsBtn = document.getElementById('instructionsBtn');
+        const nextLevelBtn = document.getElementById('nextLevelBtn');
+        const tryAgainBtn = document.getElementById('tryAgainBtn');
+        const winMessage = document.getElementById('winMessage');
+        const loseMessage = document.getElementById('loseMessage');
+        const levelDisplay = document.getElementById('level');
+        const journalistCountDisplay = document.getElementById('journalist-count');
+        const attemptsDisplay = document.getElementById('attempts');
+        
+        // Game state
+        let gameState = 'playing'; // playing, win, lose
+        let level = 1;
+        let attempts = 0;
+        let journalistCount = 3;
+        
+        // Game objects
+        let robot = {
+            x: 50,
+            y: 300,
+            radius: 15,
+            color: '#00e5ff',
+            speed: 3,
+            moveSpeed: 3,
+            sneaking: false,
+            footsteps: 0
+        };
+        
+        let computer = {
+            x: 700,
+            y: 300,
+            width: 60,
+            height: 80,
+            color: '#ffcc00'
+        };
+        
+        let journalists = [];
+        let obstacles = [];
+        let soundCircles = [];
+        
+        // Initialize game
+        function initGame() {
+            // Reset game state
+            gameState = 'playing';
+            level = parseInt(levelDisplay.innerText);
+            journalistCount = 3 + level - 1;
+            journalistCountDisplay.innerText = journalistCount;
+            attempts++;
+            attemptsDisplay.innerText = attempts;
+            
+            // Position robot and computer
+            robot.x = 50;
+            robot.y = canvas.height / 2;
+            computer.x = canvas.width - 100;
+            computer.y = canvas.height / 2 - 40;
+            
+            // Generate journalists
+            journalists = [];
+            for (let i = 0; i < journalistCount; i++) {
+                let x, y, validPosition;
+                
+                do {
+                    validPosition = true;
+                    x = 200 + Math.random() * (canvas.width - 400);
+                    y = 100 + Math.random() * (canvas.height - 200);
+                    
+                    // Check if too close to robot or computer
+                    if (distance(x, y, robot.x, robot.y) < 150 || distance(x, y, computer.x, computer.y) < 150) {
+                        validPosition = false;
+                    }
+                    
+                    // Check if too close to other journalists
+                    for (let j = 0; j < journalists.length; j++) {
+                        if (distance(x, y, journalists[j].x, journalists[j].y) < 100) {
+                            validPosition = false;
+                        }
+                    }
+                } while (!validPosition);
+                
+                journalists.push({
+                    x: x,
+                    y: y,
+                    radius: 20,
+                    color: '#ff5252',
+                    visionAngle: Math.random() * Math.PI * 2,
+                    visionRange: 180,
+                    visionConeAngle: Math.PI / 2,
+                    turnSpeed: 0.03,
+                    patrolling: Math.random() > 0.5,
+                    patrolDirection: 1,
+                    patrolAngle: 0
+                });
+            }
+            
+            // Generate obstacles
+            obstacles = [];
+            for (let i = 0; i < 5 + level; i++) {
+                obstacles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    width: 20 + Math.random() * 60,
+                    height: 20 + Math.random() * 60,
+                    color: '#3a506b'
+                });
+            }
+            
+            // Clear sound circles
+            soundCircles = [];
+        }
+        
+        // Distance calculation
+        function distance(x1, y1, x2, y2) {
+            return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+        }
+        
+        // Draw game objects
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw obstacles
+            for (let i = 0; i < obstacles.length; i++) {
+                const obs = obstacles[i];
+                ctx.fillStyle = obs.color;
+                ctx.fillRect(obs.x, obs.y, obs.width, obs.height);
+                
+                // Add some details to obstacles
+                ctx.strokeStyle = '#0f2027';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(obs.x, obs.y, obs.width, obs.height);
+            }
+            
+            // Draw vision cones
+            for (let i = 0; i < journalists.length; i++) {
+                const j = journalists[i];
+                
+                // Draw vision cone
+                ctx.beginPath();
+                ctx.moveTo(j.x, j.y);
+                ctx.arc(j.x, j.y, j.visionRange, j.visionAngle - j.visionConeAngle / 2, j.visionAngle + j.visionConeAngle / 2);
+                ctx.closePath();
+                
+                // Create gradient for vision cone
+                const gradient = ctx.createRadialGradient(j.x, j.y, 10, j.x, j.y, j.visionRange);
+                gradient.addColorStop(0, 'rgba(255, 255, 0, 0.3)');
+                gradient.addColorStop(1, 'rgba(255, 255, 0, 0.1)');
+                
+                ctx.fillStyle = gradient;
+                ctx.fill();
+            }
+            
+            // Draw sound circles
+            for (let i = 0; i < soundCircles.length; i++) {
+                const circle = soundCircles[i];
+                ctx.beginPath();
+                ctx.arc(circle.x, circle.y, circle.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(0, 229, 255, 0.3)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Draw computer
+            ctx.fillStyle = computer.color;
+            ctx.fillRect(computer.x, computer.y, computer.width, computer.height);
+            
+            // Draw computer details
+            ctx.fillStyle = '#0f2027';
+            ctx.fillRect(computer.x + 10, computer.y + 10, computer.width - 20, computer.height - 30);
+            
+            ctx.fillStyle = '#00e5ff';
+            for (let i = 0; i < 3; i++) {
+                ctx.fillRect(computer.x + 15 + i * 15, computer.y + computer.height - 15, 10, 5);
+            }
+            
+            // Draw journalists
+            for (let i = 0; i < journalists.length; i++) {
+                const j = journalists[i];
+                
+                // Draw journalist body
+                ctx.fillStyle = j.color;
+                ctx.beginPath();
+                ctx.arc(j.x, j.y, j.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw journalist eyes
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(
+                    j.x + Math.cos(j.visionAngle) * j.radius * 0.7,
+                    j.y + Math.sin(j.visionAngle) * j.radius * 0.7,
+                    j.radius / 3,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Draw journalist tie
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.moveTo(j.x, j.y + j.radius);
+                ctx.lineTo(j.x - j.radius / 2, j.y + j.radius * 1.5);
+                ctx.lineTo(j.x + j.radius / 2, j.y + j.radius * 1.5);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw journalist notepad
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(j.x - j.radius / 2, j.y + j.radius * 1.2, j.radius, j.radius / 1.5);
+            }
+            
+            // Draw robot
+            ctx.fillStyle = robot.color;
+            ctx.beginPath();
+            ctx.arc(robot.x, robot.y, robot.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw robot details
+            ctx.fillStyle = '#0f2027';
+            ctx.beginPath();
+            ctx.arc(robot.x, robot.y, robot.radius / 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#ffcc00';
+            ctx.fillRect(robot.x - robot.radius / 2, robot.y - robot.radius * 1.5, robot.radius, robot.radius / 2);
+            
+            // Draw status text
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('Use WASD or Arrow Keys to move', 10, 20);
+            ctx.fillText('Hold SHIFT to move quietly', 10, 40);
+            
+            if (robot.sneaking) {
+                ctx.fillStyle = '#00e5ff';
+                ctx.fillText('Sneaking mode activated', 10, 60);
+            }
+        }
+        
+        // Update game state
+        function update() {
+            if (gameState !== 'playing') return;
+            
+            // Update sound circles
+            for (let i = soundCircles.length - 1; i >= 0; i--) {
+                soundCircles[i].radius += 2;
+                if (soundCircles[i].radius > 100) {
+                    soundCircles.splice(i, 1);
+                }
+            }
+            
+            // Create sound circle when moving
+            robot.footsteps++;
+            if (!robot.sneaking && robot.footsteps % 10 === 0) {
+                soundCircles.push({
+                    x: robot.x,
+                    y: robot.y,
+                    radius: 10
+                });
+            }
+            
+            // Update journalists
+            for (let i = 0; i < journalists.length; i++) {
+                const j = journalists[i];
+                
+                // Check for sound circles
+                for (let k = 0; k < soundCircles.length; k++) {
+                    const circle = soundCircles[k];
+                    if (distance(j.x, j.y, circle.x, circle.y) < circle.radius + j.radius) {
+                        // Turn toward sound
+                        const targetAngle = Math.atan2(circle.y - j.y, circle.x - j.x);
+                        let angleDiff = targetAngle - j.visionAngle;
+                        
+                        // Normalize angle difference
+                        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+                        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+                        
+                        // Adjust vision angle
+                        if (angleDiff > 0) {
+                            j.visionAngle += j.turnSpeed;
+                        } else {
+                            j.visionAngle -= j.turnSpeed;
+                        }
+                    }
+                }
+                
+                // Patrol behavior
+                if (j.patrolling) {
+                    j.patrolAngle += 0.01 * j.patrolDirection;
+                    if (j.patrolAngle > Math.PI / 4 || j.patrolAngle < -Math.PI / 4) {
+                        j.patrolDirection *= -1;
+                    }
+                    j.visionAngle += 0.01 * j.patrolDirection;
+                } else {
+                    // Random slight movement
+                    j.visionAngle += (Math.random() - 0.5) * 0.03;
+                }
+                
+                // Check if robot is in vision cone
+                const angleToRobot = Math.atan2(robot.y - j.y, robot.x - j.x);
+                const angleDiff = Math.abs(angleToRobot - j.visionAngle);
+                
+                if (distance(j.x, j.y, robot.x, robot.y) < j.visionRange && 
+                    (angleDiff < j.visionConeAngle / 2 || angleDiff > Math.PI * 2 - j.visionConeAngle / 2)) {
+                    // Check if there's an obstacle between journalist and robot
+                    let blocked = false;
+                    for (let k = 0; k < obstacles.length; k++) {
+                        const obs = obstacles[k];
+                        // Simple line-rectangle intersection check
+                        if (isLineIntersectingRect(j.x, j.y, robot.x, robot.y, obs)) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!blocked) {
+                        gameState = 'lose';
+                        loseMessage.style.display = 'block';
+                        return;
+                    }
+                }
+            }
+            
+            // Check if robot reached computer
+            if (distance(robot.x, robot.y, computer.x + computer.width / 2, computer.y + computer.height / 2) < robot.radius + 30) {
+                gameState = 'win';
+                winMessage.style.display = 'block';
+                return;
+            }
+            
+            // Check for collision with obstacles
+            for (let i = 0; i < obstacles.length; i++) {
+                const obs = obstacles[i];
+                if (robot.x + robot.radius > obs.x && 
+                    robot.x - robot.radius < obs.x + obs.width &&
+                    robot.y + robot.radius > obs.y &&
+                    robot.y - robot.radius < obs.y + obs.height) {
+                    // Simple collision response - push robot out
+                    if (robot.x < obs.x) robot.x = obs.x - robot.radius;
+                    if (robot.x > obs.x + obs.width) robot.x = obs.x + obs.width + robot.radius;
+                    if (robot.y < obs.y) robot.y = obs.y - robot.radius;
+                    if (robot.y > obs.y + obs.height) robot.y = obs.y + obs.height + robot.radius;
+                }
+            }
+            
+            // Keep robot in bounds
+            robot.x = Math.max(robot.radius, Math.min(canvas.width - robot.radius, robot.x));
+            robot.y = Math.max(robot.radius, Math.min(canvas.height - robot.radius, robot.y));
+        }
+        
+        // Line-rectangle intersection check
+        function isLineIntersectingRect(x1, y1, x2, y2, rect) {
+            // Check if either endpoint is inside the rectangle
+            if (x1 >= rect.x && x1 <= rect.x + rect.width && y1 >= rect.y && y1 <= rect.y + rect.height) return true;
+            if (x2 >= rect.x && x2 <= rect.x + rect.width && y2 >= rect.y && y2 <= rect.y + rect.height) return true;
+            
+            // Check for line-rectangle intersection
+            return (
+                lineIntersectsLine(x1, y1, x2, y2, rect.x, rect.y, rect.x + rect.width, rect.y) ||
+                lineIntersectsLine(x1, y1, x2, y2, rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + rect.height) ||
+                lineIntersectsLine(x1, y1, x2, y2, rect.x + rect.width, rect.y + rect.height, rect.x, rect.y + rect.height) ||
+                lineIntersectsLine(x1, y1, x2, y2, rect.x, rect.y + rect.height, rect.x, rect.y)
+            );
+        }
+        
+        // Line-line intersection check
+        function lineIntersectsLine(x1, y1, x2, y2, x3, y3, x4, y4) {
+            const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+            if (den === 0) return false;
+            
+            const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
+            const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
+            
+            return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+        }
+        
+        // Handle keyboard input
+        const keys = {};
+        
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            // Set sneaking mode
+            robot.sneaking = e.shiftKey;
+            robot.moveSpeed = robot.sneaking ? 1.5 : 3;
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            
+            // Set sneaking mode
+            robot.sneaking = e.shiftKey;
+            robot.moveSpeed = robot.sneaking ? 1.5 : 3;
+        });
+        
+        // Process input
+        function processInput() {
+            if (gameState !== 'playing') return;
+            
+            if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+                robot.y -= robot.moveSpeed;
+            }
+            if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+                robot.y += robot.moveSpeed;
+            }
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+                robot.x -= robot.moveSpeed;
+            }
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+                robot.x += robot.moveSpeed;
+            }
+        }
+        
+        // Game loop
+        function gameLoop() {
+            processInput();
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Event listeners for buttons
+        restartBtn.addEventListener('click', () => {
+            initGame();
+            winMessage.style.display = 'none';
+            loseMessage.style.display = 'none';
+        });
+        
+        newGameBtn.addEventListener('click', () => {
+            level = 1;
+            attempts = 0;
+            levelDisplay.innerText = level;
+            attemptsDisplay.innerText = attempts;
+            initGame();
+            winMessage.style.display = 'none';
+            loseMessage.style.display = 'none';
+        });
+        
+        instructionsBtn.addEventListener('click', () => {
+            alert('Guide your robot to the computer while avoiding journalists! Use WASD or Arrow Keys to move. Hold SHIFT to move quietly. Journalists will turn toward sounds, so be careful!');
+        });
+        
+        nextLevelBtn.addEventListener('click', () => {
+            level++;
+            levelDisplay.innerText = level;
+            initGame();
+            winMessage.style.display = 'none';
+        });
+        
+        tryAgainBtn.addEventListener('click', () => {
+            initGame();
+            loseMessage.style.display = 'none';
+        });
+        
+        // Start the game
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>
