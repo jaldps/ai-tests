@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Emerge: The Game</title>
+<style>
+    body {margin:0; background:#111;color:#eee;font-family:sans-serif;}
+    #gameCanvas{display:block;background:#222;margin:auto;border:2px solid #555;}
+    #ui{
+        position:absolute;
+        top:10px; left:50%; transform:translateX(-50%);
+        font-size:1.2rem;text-align:center;padding:5px 20px;
+        background:rgba(0,0,0,.6);border-radius:8px;
+        pointer-events:none;
+    }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<div id="ui">Use arrow keys to move the robot.</div>
+
+<script>
+/* --------------------------  CONFIGURATION ---------------------------- */
+const ROBOT_SIZE = 20;          // pixels
+const COMPUTER_SIZE = 30;
+const JOURNALIST_RADIUS = 15;
+const VISION_LENGTH = 120;      // vision cone length
+const VISION_ANGLE = Math.PI / 3; // 60° cone
+const STEP_DELAY = 200;         // ms between robot steps (visual "sound")
+const JUMP_CHANCE = 0.1;        // chance journalist will turn instantly when hearing
+
+/* --------------------------  STATE ----------------------------------- */
+let canvas, ctx;
+let width, height;
+
+let robot = {x:0,y:0, dir:0};   // dir in radians
+let computer = {x:0,y:0};
+let journalists = [];          // array of {x,y,dir}
+let stepTimer = 0;              // for visual "sound" effect
+
+let gameState = 'running';      // running | win | lose
+let newJournalistCount = 1;     // increases after each win
+
+/* --------------------------  HELPERS --------------------------------- */
+function rand(min,max){ return Math.random()*(max-min)+min;}
+function clamp(val,min,max){return Math.min(Math.max(val,min),max);}
+function distance(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function angleBetween(ax,ay,bx,by){ return Math.atan2(by-ay,bx-ax); }
+
+/* --------------------------  GAME INIT -------------------------------- */
+function init(){
+    canvas = document.getElementById('gameCanvas');
+    ctx = canvas.getContext('2d');
+    width = canvas.width;
+    height = canvas.height;
+
+    placeEntities();
+    bindInput();
+    requestAnimationFrame(update);
+}
+
+/* Place computer, robot and journalists randomly while ensuring no overlaps */
+function placeEntities(){
+    // Computer
+    computer.x = rand(COMPUTER_SIZE, width - COMPUTER_SIZE);
+    computer.y = rand(COMPUTER_SIZE, height - COMPUTER_SIZE);
+
+    // Robot starts at top‑left corner (or random near edges)
+    robot.x = rand(ROBOT_SIZE, width/4);
+    robot.y = rand(ROBOT_SIZE, height/4);
+    robot.dir = 0;
+
+    // Journalists
+    journalists = [];
+    for(let i=0;i<newJournalistCount;i++){
+        let j;
+        do{
+            j={x:rand(JOURNALIST_RADIUS,width-JOURNALIST_RADIUS),
+               y:rand(JOURNALIST_RADIUS,height-JOURNALIST_RADIUS),
+               dir:Math.random()*2*Math.PI};
+        }while(distance(j,computer)<COMPUTER_SIZE+JOURNALIST_RADIUS ||
+                 distance(j,robot)<ROBOT_SIZE+JOURNALIST_RADIUS);
+        journalists.push(j);
+    }
+}
+
+/* --------------------------  INPUT ----------------------------------- */
+const keys = {};
+function bindInput(){
+    window.addEventListener('keydown',e=>{
+        if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))
+            keys[e.key]=true;
+    });
+    window.addEventListener('keyup',e=>{
+        if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))
+            keys[e.key]=false;
+    });
+}
+
+/* --------------------------  GAME LOOP -------------------------------- */
+function update(timestamp){
+    // Handle robot movement
+    const speed = 3; // pixels per frame
+    let moved=false;
+
+    if(keys.ArrowUp){ robot.y-=speed; moved=true;}
+    if(keys.ArrowDown){ robot.y+=speed; moved=true;}
+    if(keys.ArrowLeft){ robot.x-=speed; moved=true;}
+    if(keys.ArrowRight){ robot.x+=speed; moved=true;}
+
+    // Keep inside bounds
+    robot.x = clamp(robot.x,ROBOT_SIZE,width-ROBOT_SIZE);
+    robot.y = clamp(robot.y,ROBOT_SIZE,height-ROBOT_SIZE);
+
+    // Visual "sound" timer
+    if(moved){
+        stepTimer = STEP_DELAY;
+        handleJournalistAudio(); // journalists react instantly when hearing
+    }
+
+    // Reduce timer
+    if(stepTimer>0) stepTimer-=16; // approx 60fps
+
+    // Vision check (only if not already lost)
+    if(gameState==='running' && isSpotted()){
+        gameState='lose';
+        setTimeout(()=>{ showMessage('Bad robot caught doing bad things'); },200);
+    }
+
+    // Check win
+    if(gameState==='running' && distance(robot,computer)<(ROBOT_SIZE+COMPUTER_SIZE)/2){
+        gameState='win';
+        setTimeout(()=>{ showMessage('Great!! you achieve AGI\nnow all journalists are homeless'); },200);
+        newJournalistCount++; // next game will have one more journalist
+    }
+
+    draw();
+    requestAnimationFrame(update);
+}
+
+/* --------------------------  RENDER ----------------------------------- */
+function draw(){
+    ctx.clearRect(0,0,width,height);
+
+    // Draw computer (target)
+    ctx.fillStyle='#4caf50';
+    ctx.beginPath(); ctx.arc(computer.x,computer.y,COMPUTER_SIZE/2,0,Math.PI*2);
+    ctx.fill();
+
+    // Draw robot
+    ctx.save();
+    ctx.translate(robot.x,robot.y);
+    ctx.rotate(0); // robot always faces movement direction (optional)
+    ctx.fillStyle='#2196f3';
+    ctx.fillRect(-ROBOT_SIZE/2,-ROBOT_SIZE/2,ROBOT_SIZE,ROBOT_SIZE);
+    ctx.restore();
+
+    // Draw journalists
+    journalists.forEach(j=>{
+        // Vision cone
+        ctx.beginPath();
+        ctx.moveTo(j.x,j.y);
+        const left = j.dir - VISION_ANGLE/2;
+        const right= j.dir + VISION_ANGLE/2;
+        ctx.lineTo(j.x+VISION_LENGTH*Math.cos(left),j.y+VISION_LENGTH*Math.sin(left));
+        ctx.arc(j.x,j.y,VISION_LENGTH,left,right,false);
+        ctx.closePath();
+        ctx.fillStyle='rgba(255,0,0,.15)';
+        ctx.fill();
+
+        // Journalist body
+        ctx.beginPath(); ctx.arc(j.x,j.y,JOURNALIST_RADIUS,0,Math.PI*2);
+        ctx.fillStyle='#ff5722';
+        ctx.fill();
+
+        // Face direction
+        ctx.strokeStyle='#000';
+        ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.moveTo(j.x,j.y);
+        ctx.lineTo(j.x+JOURNALIST_RADIUS*Math.cos(j.dir),j.y+JOURNALIST_RADIUS*Math.sin(j.dir));
+        ctx.stroke();
+    });
+
+    // Optional: show step "sound" effect (small circle that fades)
+    if(stepTimer>0){
+        const alpha = stepTimer/STEP_DELAY;
+        ctx.fillStyle=`rgba(255,255,0,${alpha})`;
+        ctx.beginPath(); ctx.arc(robot.x,robot.y,ROBOT_SIZE*1.5,0,Math.PI*2);
+        ctx.fill();
+    }
+}
+
+/* --------------------------  GAME LOGIC -------------------------------- */
+function isSpotted(){
+    // Check each journalist vision cone
+    for(const j of journalists){
+        const dx = robot.x - j.x;
+        const dy = robot.y - j.y;
+        const dist = Math.hypot(dx,dy);
+        if(dist > VISION_LENGTH) continue; // too far
+
+        const angleToRobot = Math.atan2(dy,dx);
+        let diff = Math.abs(angleBetween(j.dir,0,angleToRobot,0));
+        diff = Math.min(diff, 2*Math.PI - diff); // normalize
+        if(diff < VISION_ANGLE/2){
+            return true; // robot is in cone
+        }
+    }
+    return false;
+}
+
+/* Journalists react to robot "sound" by turning instantly towards it */
+function handleJournalistAudio(){
+    for(const j of journalists){
+        if(Math.random() < JUMP_CHANCE){ // random chance to react quickly
+            const dir = Math.atan2(robot.y-j.y,robot.x-j.x);
+            j.dir = dir;
+        }
+    }
+}
+
+/* --------------------------  UI --------------------------------------- */
+function showMessage(text){
+    const ui=document.getElementById('ui');
+    ui.textContent=text;
+    ui.style.background='rgba(0,0,0,.8)';
+    setTimeout(()=>{ if(gameState!=='running') { // reset after showing
+        gameState='running';
+        init();
+        ui.textContent='Use arrow keys to move the robot.';
+        ui.style.background='rgba(0,0,0,.6)';
+    }},4000);
+}
+
+/* --------------------------  START ------------------------------------- */
+init();
+
+</script>
+</body>
+</html>
