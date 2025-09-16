@@ -1,0 +1,78 @@
+PUMP Surges 77% Weekly as Diamond Hands Reap 270% Rewards: Analysis
+
+Those who weathered the 70% post-ICO crash are now sitting pretty, with PUMP up 63% from its launch price and a staggering 270% from July's bottom
+
+By Jose Antonio Lanz
+Sep 16, 2025
+5 min read
+
+Image created by Decrypt using AI
+
+In brief
+
+• PUMP rockets 77% weekly to $0.0087, driven by aggressive buybacks and platform dominance
+• Technical indicators flash extremely bullish with RSI at 79 and ADX confirming powerful uptrend at 44
+• Investors who held through July's crash now up 270% from bottom, validating our previous buy signal
+
+The crypto market continues its dance of consolidation, with Bitcoin and Ethereum more or less trading sideways as traders and investors await the Federal Reserve's next move.
+
+But while the crypto majors tread water ahead of Wednesday's eagerly anticipated interest rate cut decision, one token is stealing the show with a face-melting 77% weekly rally: Pump.fun's PUMP.
+
+Defying both the narrative of its own doomers and the typical seasonal market slump in September, the Solana-based Pump is defying the naysayers and rewarding its diamond hands. Pump has now gone from July's worst-performing token to September's comeback king.
+
+Here's what's going on, and what the charts have to say about it.
+
+Pump.fun's PUMP price: The buy signal was real
+
+Pump.fun might as well have told its bagholders: "If you can't handle me at my worst, you don't deserve me at my best."
+
+Those who had the stomach to handle PUMP's nearly 70% dip after its July launch are now all in the green—the coin is 63% up from its ICO price and nearly 270% up from the bottom.
+
+PUMP's remarkable turnaround validates our analysis from July, when we called the bottom near $0.0023. The actual bottom turned out to be $0.00227—so, very close.
+
+How did this happen? It can be summed up like this:
+
+Pump.fun, the Solana meme coin launchpad responsible for millions upon millions of tokens entering the trenches, launched its own PUMP token in an ICO in July—back when competing token launchpads were nipping at its heels.
+
+The PUMP token sold out in seconds at a $4 billion valuation, generating $600 million in fresh capital for the company. The price of PUMP soared in the immediate aftermath, then cratered almost as quickly. Throughout July and early August, Pump.fun lost ground to competing launchpads—namely Bonk.fun—and the price of PUMP suffered as a result. Then, things changed.
+
+In late July, Pump.fun initiated token buy backs (similar to stock buy backs, for you normies out there), taking profits generated from its launchpad and putting them directly back into the chart, pumping PUMP. The company then introduced "creator rewards" (fees similar to NFT royalties) and other incentives for livestreamers, and it's been good times for Pump ever since. The platform has regained the ground lost to competitors in July, trading volumes are up, and Pump.fun is back to generating over $1 million in revenue per day.
+
+So, naturally, PUMP is now up 4X from its July bottom. Now, onto the charts:
+
+The Pump token opened today at $0.0086, above an $8.6 billion fully diluted valuation, and since settled at $0.0082. It's up slightly in the last 24 hours, testing the psychological resistance level of $0.009 marked by its all-time high.
+
+The technical indicators most traders who study charts look at all point to a powerful uptrend, though it is approaching some significant inflection points.
+
+The Relative Strength Index, or RSI, for PUMP is at 79 at the moment, which is deeply overbought. RSI measure measures momentum on a 0-100 scale, where readings above 70 signal overbought conditions. At 79 points, PUMP is flashing some warning signs. This is typically where profit-taking emerges as algorithmic trading systems trigger automatic sales.
+
+Traders would read this as bearish in the immediate term, because most often lock in gains at these extreme levels, potentially triggering a pullback to the $0.007-$0.0075 range before the next leg higher.
+
+This might be why predictors on Myriad—a prediction market built by Decrypt's parent company, Dastan—are slightly bearish on PUMP at the moment. With PUMP currently at a $2.9 billion market cap, Myriad users believe it's more likely PUMP dips below $2 billion than spikes above $4 billion, placing odds at 54.3% vs 45.7%.
+
+Another common indicator for technical-analysis-minded traders is the Average Directional Index, or ADX. PUMP's ADX is at 44, which screams "strong trend in progress." ADX measures trend strength regardless of direction, with readings above 25 confirming established trends and above 40 indicating extremely powerful momentum.
+
+At 44, PUMP's ADX gives traders a sense that a long-term bullish trend is in place. In other words, despite a possible correction, there is a reasonable chance of a cup and handle pattern emerging in the chart—the sort that's formed from a big crash (in July) and recovery (now) followed by a smaller crash and recovery shortly after.
+
+Since the coin is still so young, there is still not enough data to do an exponential moving average comparison. But in shorter timeframes, the coin entered into "golden cross" territory in early September.
+
+A golden cross is when the average price of an asset over short term crosses above the average price over the long term, and it's widely interpreted by traders as a strong bullish signal.
+
+This is important because price action in shorter timeframes is often noisier than in longer timeframes, but price movements appear on those noisy charts sooner. In other words, extrapolating data, it's easy to see why traders would conclude a bullish move is in play when short-term averages are moving above slower long-term averages.
+
+Also, the coin has done a 4X in seven weeks. So there's that, too.
+
+Key levels to watch
+
+Immediate support: $0.0074 (recent consolidation zone)
+
+Strong support: $0.0066
+
+Immediate resistance: $0.0090 (Psychological level near ATH)
+
+Strong resistance: $0.0105 (next Fibonacci extension and potential breakout target)
+
+---
+
+Source: Decrypt
+URL: https://decrypt.co/339788/preview-339788
