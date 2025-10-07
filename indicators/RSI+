@@ -1,317 +1,316 @@
 //@version=6
-// ##################################################################################
-//  APIDEVs TL Strategy (Multi‑language)
 //
-//  This script reproduces the functionality showcased in the TradingLatino
-//  ecosystem of indicators as described in the APIDEVs documentation and
-//  accompanying video.  It combines several well‑known technical studies:
-//    • Exponential moving average band to visualize trend and detect crossovers.
-//    • Average Directional Index (ADX) with directional (DI+/DI−) lines to
-//      colour the ADX according to trend strength and direction.  Horizontal
-//      thresholds mark regions of strong trend and lack of interest.
-//    • John Carter’s TTM Squeeze momentum oscillator (LazyBear version) to
-//      separate momentum into “impulse” and “force” quadrants.  Colours and
-//      names change depending on whether momentum is increasing or decreasing.
-//    • A simplified fixed‑range volume profile computed over the last N bars
-//      based on volume‑weighted average price (VWAP) to estimate whether price
-//      trades above or below the high‑volume area.
-//    • Automated long/short signals combining the oscillator’s impulse phases
-//      with the ADX directional bias and optional EMA trend filter.  Only one
-//      signal is emitted per impulse quadrant when enabled.
-//    • A status panel summarising the state of each component.  Texts and
-//      labels automatically translate between Spanish and English depending on
-//      the selected language.
+// RSI Pro+ indicator with integrated ADX and cloud system.
 //
-//  Please note that this indicator is for educational purposes only.  It
-//  illustrates how to combine multiple studies and present their state in a
-//  concise panel.  Do not rely on it as a complete trading system without
-//  further testing and risk management.
+// This script implements the APIDEVs "RSI Pro+" indicator as explained in the
+// companion document and video. The core enhancements over the standard
+// Relative Strength Index (RSI) include:
+//
+//  • A coloured cloud (or band) drawn between the RSI and its simple moving
+//    average (SMA). The cloud turns green when the RSI is above the SMA
+//    (suggesting bullish momentum) and red when the RSI is below its SMA
+//    (suggesting bearish momentum). This visual aid reduces noise and makes
+//    trend direction easier to interpret.
+//
+//  • Shaded overbought and oversold zones instead of thin lines. The default
+//    settings shade the region between 70 and 80 in red to signal a potential
+//    sell zone and between 30 and 20 in green to signal a potential buy
+//    zone. These thresholds are adjustable and reflect common RSI guidance
+//    that readings above 70 often indicate overbought conditions and readings
+//    below 30 indicate oversold conditions【610955008608696†L259-L315】.
+//
+//  • Integration of the Average Directional Index (ADX) and its directional
+//    movement components DI+ and DI-. The ADX measures trend strength
+//    irrespective of direction, while DI+ and DI- identify whether price
+//    movement is bullish or bearish. When ADX values rise above a user-set
+//    threshold and DI+ is above DI-, the background behind the RSI cloud
+//    turns green to highlight a strong uptrend; when DI- is above DI+, the
+//    background turns red to signal a strong downtrend. The midline at 50
+//    changes colour to reflect the prevailing directional movement (green
+//    when DI+ > DI-, red when DI- > DI+).
+//
+//  • A comprehensive signalling system. Major signals occur when the RSI
+//    pulls back to the midline (50) after entering an overbought or oversold
+//    zone and then resumes in the direction of the dominant trend
+//    (determined by DI+ and DI-). Additional minor signals mark crosses of
+//    the RSI and its SMA and crosses of overbought/oversold thresholds.
+//    Alerts are provided for each condition so that users can create
+//    notifications in TradingView.
+//
+//  • A side panel summarising the current indicator state (RSI value,
+//    direction, ADX value, trend strength and recommended action). The panel
+//    supports Spanish (ES) and English (EN) via the `Idioma / Language`
+//    input.
+//
+//  • Optional bar colouring based on either RSI direction or ADX/DI
+//    dominance. Bollinger Bands on the RSI can be displayed as an
+//    experimental overlay.
+//
+// The indicator includes numerous inputs to customise lengths, thresholds,
+// colours, transparency and which features are displayed. It aims to match
+// the visual style and functionality described in the APIDEVs tutorial while
+// remaining self‑contained and easy to modify.
 
-// ##################################################################################
-// === Inputs ===
-// Language toggle
-languageInput   = input.string(
-    title="Idioma / Language",
-    defval="ES",
-    options=["ES", "EN"],
-    tooltip="Select ES for Español or EN for English.  Elija ES para Español o EN para Inglés."
-)
+// === Input section ===
 
-// Exponential moving averages
-fastLen         = input.int(title="Fast EMA length", defval=50, minval=1)
-slowLen         = input.int(title="Slow EMA length", defval=200, minval=1, tooltip="Length of the slower moving average.  A longer period defines the major trend.")
-showEMABand     = input.bool(title="Show EMA band", defval=true, tooltip="Toggle visibility of the coloured EMA band on the price chart.")
+// Language selection: choose Spanish (ES) or English (EN). Text strings
+// throughout the script are drawn from a simple dictionary below.
+var string languageInput = input.string(title="Idioma / Language", defval="ES", options=["ES", "EN"])
 
-// ADX and Directional Movement settings
-adxLen          = input.int(title="ADX length", defval=14, minval=1)
-diLen           = input.int(title="DI length", defval=14, minval=1)
-adxLowLvl       = input.float(title="ADX low threshold", defval=17.0, minval=1.0, tooltip="Below this level price action is considered lacking interest (range).  Suggested values: 15–23.")
-adxHighLvl      = input.float(title="ADX high threshold", defval=30.0, minval=1.0, tooltip="Above this level the trend is considered very strong.  Suggested values: 30–35.")
-showADX         = input.bool(title="Show ADX indicator", defval=true, tooltip="If enabled, plots the coloured ADX line and its thresholds.")
-colourBarsADX   = input.bool(title="Colour candles by DI cross", defval=true, tooltip="Paint price bars green or red depending on DI+ / DI− cross.")
+// RSI configuration
+int rsiLength = input.int(14, title="RSI Length", minval=1)
+int maLength  = input.int(14, title="RSI MA Length", minval=1)
+source rsiSource = input.source(close, title="RSI Source")
 
-// Squeeze Momentum (LazyBear TTM Squeeze)
-showSqueeze     = input.bool(title="Show Squeeze oscillator", defval=true)
-sqzBBLen        = input.int(title="Bollinger Bands length", defval=20, minval=1)
-sqzBBMult       = input.float(title="Bollinger Bands multiplier", defval=2.0, step=0.1)
-sqzKCLen        = input.int(title="Keltner Channel length", defval=20, minval=1)
-sqzKCMult       = input.float(title="Keltner Channel multiplier", defval=1.5, step=0.1)
-sqzMomLen       = input.int(title="Linear momentum length", defval=20, minval=1, tooltip="Length of the linear regression used for the momentum histogram.")
-useEMAfilter    = input.bool(title="Filter signals by EMA trend", defval=true, tooltip="Only permit long signals when the fast EMA is below the slow EMA (bearish trend) and short signals when the fast EMA is above (bullish trend).  Disable to see all impulses.")
-oneSigPerQuad   = input.bool(title="Limit to one signal per impulse quadrant", defval=true)
+// Overbought and oversold zones (inner and outer bounds). These default
+// thresholds can be adjusted. The inner threshold marks the start of
+// overbought/oversold and the outer threshold defines the extreme band.
+float overboughtInner = input.float(70.0, title="Overbought Start", minval=0, maxval=100)
+float overboughtOuter = input.float(80.0, title="Overbought End", minval=0, maxval=100)
+float oversoldInner   = input.float(30.0, title="Oversold Start", minval=0, maxval=100)
+float oversoldOuter   = input.float(20.0, title="Oversold End", minval=0, maxval=100)
 
-// Volume profile / VWAP approximation
-showVP          = input.bool(title="Show volume profile line", defval=true)
-vpLookback      = input.int(title="Volume profile lookback bars", defval=75, minval=10, tooltip="Number of previous bars used to compute the simplified volume profile (VWAP).")
+// ADX configuration
+int adxLength     = input.int(14, title="ADX Length", minval=1)
+int diLength      = input.int(14, title="DI Length", minval=1)
+float trendLevel  = input.float(25.0, title="ADX Trend Level", minval=0)
+float rangeLevel  = input.float(0.0, title="ADX Range Level", minval=0)
 
-// Panel options
-showPanel       = input.bool(title="Show status panel", defval=true)
-panelX          = input.int(title="Panel horizontal offset", defval=2, minval=0, maxval=100, tooltip="Horizontal offset of the status panel measured in chart columns.")
-panelY          = input.int(title="Panel vertical offset", defval=20, minval=0, maxval=100, tooltip="Vertical offset of the status panel measured in chart rows.")
+// Display options
+bool showRSI       = input.bool(true, title="Show RSI Line")
+bool showCloud     = input.bool(true, title="Show RSI Cloud")
+bool showCloudSig  = input.bool(true, title="Show Cloud Signals")
+bool showMidSig    = input.bool(true, title="Show Midline Signals")
+bool showOBOSsig   = input.bool(true, title="Show OB/OS Signals")
+bool showBB        = input.bool(false, title="Show Bollinger Bands (Experimental)")
+bool showPanel     = input.bool(true, title="Show Information Panel")
+string panelSize   = input.string("Normal", title="Panel Size", options=["Tiny", "Small", "Normal", "Large"])
 
-// === Internal calculations ===
-// Compute EMAs
-fastEMA = ta.ema(close, fastLen)
-slowEMA = ta.ema(close, slowLen)
+// Bar colouring options
+string barColouring = input.string("None", title="Bar Colouring", options=["None", "RSI", "ADX"])
 
-// Determine trend colour for the EMA band
-var color emaColour = color.new(color.gray, 0)
-trendCondition = fastEMA > slowEMA
-// Colour logic: green for bullish, red for bearish, orange on crossover
-emaUpColour   = color.new(color.lime, 0)
-emaDownColour = color.new(color.red, 0)
-emaCrossColour= color.new(color.orange, 0)
-// Determine if a crossover occurred this bar
-emaCross      = ta.cross(fastEMA, slowEMA)
-emaColour     := emaCross ? emaCrossColour : trendCondition ? emaUpColour : emaDownColour
+// Transparency of filled regions (0 = opaque, 100 = transparent)
+int cloudTransparency = input.int(75, title="Cloud Transparency", minval=0, maxval=100)
+int zoneTransparency  = input.int(80, title="Zone Transparency", minval=0, maxval=100)
 
-// Plot EMA band (between fast and slow) if enabled
-if showEMABand
-    ema1 = plot(fastEMA, color=color.new(color.transparent, 0), title="Fast EMA")
-    ema2 = plot(slowEMA, color=color.new(color.transparent, 0), title="Slow EMA")
-    fill(ema1, ema2, color=emaColour, title="EMA Band")
+// === Helper functions ===
 
-// === ADX and DI calculations ===
-// Directional movement helper (returns plus and minus DI)
-f_dirmov(int len) =>
-    up   = ta.change(high)
-    down = -ta.change(low)
-    trur = ta.rma(ta.tr(true), len)
-    plusDM  = 100 * ta.rma((up > down and up > 0 ? up : 0), len) / trur
-    minusDM = 100 * ta.rma((down > up and down > 0 ? down : 0), len) / trur
-    [plusDM, minusDM]
+// Basic dictionary for bilingual support. Each key maps to an array of two
+// strings: [Spanish, English]. When new text is added, include both
+// translations here.
+var table<string, string[]> DICT = table.new()
+// Initialise dictionary entries only once (on the first bar). The
+// `if (bar_index == 0)` guard ensures these calls run a single time.
+if bar_index == 0
+    // Titles and headings
+    DICT.put("rsi",         ["RSI", "RSI"])
+    DICT.put("adx",         ["ADX", "ADX"])
+    DICT.put("trend",       ["Tendencia", "Trend"])
+    DICT.put("signal",      ["Señal", "Signal"])
+    DICT.put("long",        ["Compra", "Long"])
+    DICT.put("short",       ["Venta", "Short"])
+    DICT.put("neutral",     ["Rango", "Range"])
+    DICT.put("strong",      ["Fuerte", "Strong"])
+    DICT.put("weak",        ["Débil", "Weak"])
+    DICT.put("rsi_overbought", ["RSI sobrecompra", "RSI overbought"])
+    DICT.put("rsi_oversold",   ["RSI sobreventa", "RSI oversold"])
+    DICT.put("cloud_cross",    ["Cruce de nube", "Cloud cross"])
+    DICT.put("mid_cross",      ["Cruce de mitad", "Midline cross"])
+    DICT.put("color_change",   ["Cambio de color", "Colour change"])
+    DICT.put("ob_cross",       ["Cruzó sobrecompra", "Overbought cross"])
+    DICT.put("os_cross",       ["Cruzó sobreventa", "Oversold cross"])
+    DICT.put("panel_rsi",      ["RSI", "RSI"])
+    DICT.put("panel_adx",      ["ADX", "ADX"])
+    DICT.put("panel_action",   ["Acción", "Action"])
+    DICT.put("strong_up",      ["Fuerte ↑", "Strong ↑"])
+    DICT.put("strong_down",    ["Fuerte ↓", "Strong ↓"])
+    DICT.put("weak_up",        ["Débil ↑", "Weak ↑"])
+    DICT.put("weak_down",      ["Débil ↓", "Weak ↓"])
+    DICT.put("rsi_dir_up",     ["RSI ↑", "RSI ↑"])
+    DICT.put("rsi_dir_down",   ["RSI ↓", "RSI ↓"])
+    DICT.put("adx_dir_up",     ["ADX ↑", "ADX ↑"])
+    DICT.put("adx_dir_down",   ["ADX ↓", "ADX ↓"])
 
-// ADX calculation
-f_adx(int dilen, int adxlen) =>
-    [plusDM, minusDM] = f_dirmov(dilen)
-    sumDM    = plusDM + minusDM
-    dx       = 100 * ta.rma(math.abs(plusDM - minusDM) / (sumDM == 0 ? 1 : sumDM), adxlen)
-    [dx, plusDM, minusDM]
+// Helper to fetch translated text for the current language
+string t(string key) =>
+    string[] pair = DICT.get(key)
+    pair == na ? key : (languageInput == "ES" ? pair[0] : pair[1])
 
-[adxValue, diPlus, diMinus] = f_adx(diLen, adxLen)
+// === Calculation section ===
 
-// Determine ADX colour based on DI cross and whether ADX is rising or falling
-isRisingADX = adxValue > adxValue[1]
-adxUpColour   = color.new(color.lime, 0)
-adxDownColour = color.new(color.red, 0)
-adxUpWeak     = color.new(color.rgb(46, 245, 39), 50)
-adxDownWeak   = color.new(color.rgb(217, 6, 6), 50)
-// Base colour: orange when below low threshold (disinterest)
-adxFlatColour = color.new(color.orange, 0)
-// Choose final colour
-adxColour = diPlus > diMinus ? (isRisingADX ? adxUpColour : adxUpWeak) : (diMinus > diPlus ? (isRisingADX ? adxDownColour : adxDownWeak) : adxFlatColour)
-// If ADX below low threshold, override with flat colour
-adxColour := adxValue < adxLowLvl ? adxFlatColour : adxColour
+// Compute RSI and its moving average
+float rsiVal = ta.rsi(rsiSource, rsiLength)
+float rsiMA  = ta.sma(rsiVal, maLength)
 
-// Optionally colour price bars by DI direction
-if colourBarsADX
-    barColor = diPlus > diMinus ? color.new(color.lime, 30) : diPlus < diMinus ? color.new(color.red, 30) : color.gray
-    barcolor(barColor)
+// Compute ADX and DI components
+float diPlus  = ta.diplus(diLength)
+float diMinus = ta.diminus(diLength)
+float adxVal  = ta.adx(adxLength)
 
-// Plot ADX and thresholds if enabled
-if showADX
-    plot(adxValue, title="ADX", color=adxColour, linewidth=2)
-    hLow  = hline(adxLowLvl, title="ADX Low", linestyle=hline.style_dotted, color=color.gray)
-    hHigh = hline(adxHighLvl, title="ADX High", linestyle=hline.style_dotted, color=color.gray)
+// Determine directional bias based on DI cross
+bool diBullish = diPlus > diMinus
+bool diBearish = diPlus < diMinus
 
-// === Squeeze Momentum Indicator ===
-// Compute Bollinger Bands
-sqzSource  = close
-sqzBasis   = ta.sma(sqzSource, sqzBBLen)
-sqzDev     = sqzBBMult * ta.stdev(sqzSource, sqzBBLen)
-sqzUpperBB = sqzBasis + sqzDev
-sqzLowerBB = sqzBasis - sqzDev
-// Compute Keltner Channels
-kcBasis    = ta.sma(sqzSource, sqzKCLen)
-kcRange    = ta.tr(true)
-kcDev      = ta.sma(kcRange, sqzKCLen) * sqzKCMult
-sqzUpperKC = kcBasis + kcDev
-sqzLowerKC = kcBasis - kcDev
-// Determine squeeze condition
-sqzOnCond  = (sqzLowerBB > sqzLowerKC) and (sqzUpperBB < sqzUpperKC)
-sqzOffCond = (sqzLowerBB < sqzLowerKC) and (sqzUpperBB > sqzUpperKC)
-sqzNeutral = not sqzOnCond and not sqzOffCond
+// Determine whether ADX indicates a strong trend
+bool adxStrong = adxVal >= trendLevel
+bool adxRange  = adxVal < trendLevel and adxVal >= rangeLevel
+bool adxWeak   = adxVal < rangeLevel
 
-// Compute momentum oscillator using LazyBear’s formula
-// This is a linear regression of the difference between price and an average of
-// highest/lowest and the moving average.  The resulting histogram oscillates
-// around zero; increases in magnitude indicate stronger momentum.
-meanHighLow  = (ta.highest(high, sqzMomLen) + ta.lowest(low, sqzMomLen)) / 2
-meanClose    = ta.sma(close, sqzMomLen)
-rawMomentum  = close - math.avg(meanHighLow, meanClose)
-val          = ta.linreg(rawMomentum, sqzMomLen, 0)
+// Slope direction of ADX and RSI
+bool adxRising = adxVal > adxVal[1]
+bool rsiRising = rsiVal > rsiVal[1]
 
-// Determine colours and quadrant names for the histogram
-isIncreasing = val > nz(val[1])
-isDecreasing = val < nz(val[1])
-momentumColour = val > 0 ? (isIncreasing ? color.rgb(46, 245, 39) : color.rgb(16, 120, 13)) : val < 0 ? (isDecreasing ? color.rgb(217, 6, 6) : color.rgb(98, 0, 0)) : color.gray
+// Determine RSI band colour (cloud colour) and RSI line colour
+color rsiColour = diBullish ? color.green : color.red
+// Intensify colours when in overbought/oversold zones
+color rsiColourIntensified = rsiVal >= overboughtInner ? (diBullish ? color.new(color.green, 0) : color.new(color.red, 0)) :
+    rsiVal <= oversoldInner ? (diBullish ? color.new(color.green, 0) : color.new(color.red, 0)) : rsiColour
 
-// Quadrant names based on momentum colour
-quadrantNameES = val > 0 ? (isIncreasing ? "Impulso Alcista" : "Fuerza Alcista") : val < 0 ? (isDecreasing ? "Impulso Bajista" : "Fuerza Bajista") : "Sin cambio"
-quadrantNameEN = val > 0 ? (isIncreasing ? "Bullish Impulse" : "Bullish Force") : val < 0 ? (isDecreasing ? "Bearish Impulse" : "Bearish Force") : "Flat"
-quadrantName   = languageInput == "EN" ? quadrantNameEN : quadrantNameES
-// Momentum arrows for the panel
-quadArrow      = val > 0 ? "↗" : val < 0 ? "↘" : "→"
+// Cloud colour depends on whether RSI is above or below its MA
+color cloudColour = rsiVal >= rsiMA ? color.green : color.red
 
-// Plot squeeze histogram
-if showSqueeze
-    plot(val, title="Squeeze Histogram", style=plot.style_columns, color=momentumColour, linewidth=3)
-    // Optional crosses to indicate squeeze on/off
-    plotshape(sqzOnCond, title="Squeeze On", style=shape.cross, location=location.bottom, color=color.gray, size=size.tiny)
-    plotshape(sqzOffCond, title="Squeeze Off", style=shape.cross, location=location.bottom, color=color.black, size=size.tiny)
+// Midline colour depends on DI cross (green for bullish, red for bearish)
+color midColour = diBullish ? color.green : diBearish ? color.red : color.gray
 
-// === Simplified Volume Profile (VWAP) ===
-// Use a rolling volume‑weighted average price to approximate the POC of a fixed
-// range.  We avoid the overhead of full price binning and instead compute the
-// volume weighted mean price.  This is sufficient for determining whether
-// current price is above or below the high‑volume area.
-vwapNumerator   = ta.sum(volume * hl2, vpLookback)
-vwapDenominator = ta.sum(volume, vpLookback)
-vpocPrice       = vwapDenominator != 0 ? vwapNumerator / vwapDenominator : na
+// Background shading when ADX indicates strong trend
+color bgColour = adxStrong ? (diBullish ? color.new(color.green, 85) : color.new(color.red, 85)) : na
 
-// Plot the volume profile line on the price chart if requested
-if showVP and not na(vpocPrice)
-    vpColor = close > vpocPrice ? color.new(color.lime, 40) : color.new(color.red, 40)
-    line.new(x1=bar_index[1], y1=vpocPrice[1], x2=bar_index, y2=vpocPrice, extend=extend.right, color=vpColor, width=2, style=line.style_dashed, title="Volume Profile POC")
+// === Signal Logic ===
 
-// === Signal generation ===
-// Basic ADX direction: positive trend if DI+ > DI−, negative otherwise
-adxDirUp    = diPlus > diMinus
-adxDirDown  = diMinus > diPlus
+// State variables to track whether RSI has been in overbought/oversold zones
+var bool wasOversold = false
+var bool wasOverbought = false
 
-// Determine if momentum is in impulse quadrant
-impulseUp   = val > 0 and val > val[1]
-impulseDown = val < 0 and val < val[1]
+// Update oversold/overbought flags
+wasOversold := (rsiVal <= oversoldInner or wasOversold) and not (rsiVal > oversoldInner and wasOversold and ta.crossover(rsiVal, oversoldInner)) ? wasOversold : (rsiVal <= oversoldInner)
+wasOverbought := (rsiVal >= overboughtInner or wasOverbought) and not (rsiVal < overboughtInner and wasOverbought and ta.crossunder(rsiVal, overboughtInner)) ? wasOverbought : (rsiVal >= overboughtInner)
 
-// Generate raw buy and sell signals based on momentum impulse and ADX direction
-longRaw  = impulseUp and adxDirDown   // bullish impulse after bearish trend
-shortRaw = impulseDown and adxDirUp   // bearish impulse after bullish trend
+// Major signals: RSI crosses midline (50) after being oversold or overbought and in agreement with DI direction
+bool crossAbove50 = ta.crossover(rsiVal, 50)
+bool crossBelow50 = ta.crossunder(rsiVal, 50)
 
-// Apply EMA trend filter if enabled
-bool allowLong  = not useEMAfilter or slowEMA > fastEMA  // bearish trend means allow longs (looking for reversal)
-bool allowShort = not useEMAfilter or fastEMA > slowEMA  // bullish trend means allow shorts (looking for reversal)
-longSignalRaw   := longRaw and allowLong
-shortSignalRaw  := shortRaw and allowShort
+bool longSignal  = wasOversold and crossAbove50 and diBullish
+bool shortSignal = wasOverbought and crossBelow50 and diBearish
 
-// Apply one‑signal‑per‑quadrant filter
-var int lastSigQuadrant = 0
-int thisQuadrant = impulseUp ? 1 : impulseDown ? -1 : 0
-bool longSignal  = longSignalRaw
-bool shortSignal = shortSignalRaw
-if oneSigPerQuad
-    if thisQuadrant == lastSigQuadrant
-        // ignore subsequent signals in the same impulse quadrant
-        longSignal  := false
-        shortSignal := false
-    else
-        // update quadrant on first signal
-        if longSignalRaw or shortSignalRaw
-            lastSigQuadrant := thisQuadrant
+// Reset flags after generating signals
+if longSignal
+    wasOversold := false
+if shortSignal
+    wasOverbought := false
 
-// Plot signal markers on the price chart
-plotshape(longSignal, title="Buy Signal", location=location.belowbar, color=color.new(color.lime, 0), style=shape.labelup, text="B", size=size.tiny, textcolor=color.black, offset=0)
-plotshape(shortSignal, title="Sell Signal", location=location.abovebar, color=color.new(color.red, 0), style=shape.labeldown, text="S", size=size.tiny, textcolor=color.white, offset=0)
+// Secondary signals: RSI crosses its moving average (cloud cross)
+bool cloudCrossUp   = ta.crossover(rsiVal, rsiMA)
+bool cloudCrossDown = ta.crossunder(rsiVal, rsiMA)
 
-// Alert conditions to allow automation and notifications
-alertcondition(longSignal, title="Long alert", message="APIDEVs TL Strategy Long signal on {{ticker}} @ {{close}}")
-alertcondition(shortSignal, title="Short alert", message="APIDEVs TL Strategy Short signal on {{ticker}} @ {{close}}")
-alertcondition(ta.crossover(adxValue, adxHighLvl), title="ADX entered strong trend", message="ADX has crossed above the high threshold on {{ticker}}")
-alertcondition(ta.crossunder(adxValue, adxLowLvl), title="ADX entered low interest", message="ADX has crossed below the low threshold on {{ticker}}")
-alertcondition(sqzOnCond, title="Squeeze On", message="Squeeze compression ON on {{ticker}}")
-alertcondition(sqzOffCond, title="Squeeze Off", message="Squeeze compression OFF on {{ticker}}")
+// Secondary signals: RSI crosses overbought and oversold thresholds
+bool overboughtCross = ta.crossover(rsiVal, overboughtInner)
+bool oversoldCross   = ta.crossunder(rsiVal, oversoldInner)
 
-// === Status classification for panel ===
-// EMA status and recommendation
-emaStatus  = trendCondition ?
-    (languageInput == "EN" ? str.tostring(fastLen) + " > " + str.tostring(slowLen) : str.tostring(fastLen) + " > " + str.tostring(slowLen)) :
-    (languageInput == "EN" ? str.tostring(fastLen) + " < " + str.tostring(slowLen) : str.tostring(fastLen) + " < " + str.tostring(slowLen))
-emaSignal  = trendCondition ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")
-emaColor   = trendCondition ? color.lime : color.red
+// Colour change signals: RSI changes colour (i.e., DI cross) which can hint at trend weakness
+bool colourChangeUp   = diBullish and diBearish[1]
+bool colourChangeDown = diBearish and diBullish[1]
 
-// Squeeze momentum status
-sqzStatus  = quadrantName + " " + quadArrow
-// Determine suggestion: Impulse suggests direction; Force suggests range
-sqzSignal  = impulseUp ? (languageInput == "EN" ? "Long" : "Largo") : impulseDown ? (languageInput == "EN" ? "Short" : "Corto") : (languageInput == "EN" ? "Range" : "Rango")
-sqzColor   = impulseUp ? color.lime : impulseDown ? color.red : color.orange
+// === Plotting ===
 
-// Volume profile status
-vpStatus   = not na(vpocPrice) ? (close > vpocPrice ? (languageInput == "EN" ? "Above" : "Encima") : (languageInput == "EN" ? "Below" : "Debajo")) : (languageInput == "EN" ? "N/A" : "N/D")
-vpSignal   = not na(vpocPrice) ? (close > vpocPrice ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")) : (languageInput == "EN" ? "Range" : "Rango")
-vpColor    = not na(vpocPrice) ? (close > vpocPrice ? color.lime : color.red) : color.orange
+// Overbought and oversold zone shading
+plot(overboughtInner, title="Overbought Start", color=color.new(color.red, zoneTransparency), linewidth=0, style=plot.style_stepline, display=display.pane)
+plot(overboughtOuter, title="Overbought End", color=color.new(color.red, zoneTransparency), linewidth=0, style=plot.style_stepline, display=display.pane)
+plot(oversoldInner,   title="Oversold Start", color=color.new(color.green, zoneTransparency), linewidth=0, style=plot.style_stepline, display=display.pane)
+plot(oversoldOuter,   title="Oversold End", color=color.new(color.green, zoneTransparency), linewidth=0, style=plot.style_stepline, display=display.pane)
 
-// ADX status
-// Show value rounded to whole number
-adxValStr  = str.tostring(math.round(adxValue))
-adxArrow   = adxValue > adxValue[1] ? "↗" : "↘"
-adxStateEN = adxValue < adxLowLvl ? "No Trend" : adxValue > adxHighLvl ? "Strong" : "Weak"
-adxStateES = adxValue < adxLowLvl ? "Sin Tendencia" : adxValue > adxHighLvl ? "Fuerte" : "Débil"
-adxState   = languageInput == "EN" ? adxStateEN : adxStateES
-adxStatus  = adxValStr + " " + adxArrow + " " + adxState
-// ADX recommendation: strong trend uses DI direction; otherwise range
-adxSignal  = adxValue < adxLowLvl ? (languageInput == "EN" ? "Range" : "Rango") : adxValue > adxHighLvl ? (diPlus > diMinus ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")) : (languageInput == "EN" ? "Range" : "Rango")
-adxColor   = adxValue < adxLowLvl ? color.orange : adxValue > adxHighLvl ? (diPlus > diMinus ? color.lime : color.red) : color.yellow
+// Fill the overbought and oversold zones with colour
+bgcolor(rsiVal >= overboughtInner and rsiVal <= overboughtOuter ? color.new(color.red, 90) : na)
+bgcolor(rsiVal <= oversoldInner and rsiVal >= oversoldOuter ? color.new(color.green, 90) : na)
 
-// Squeeze ON/OFF status
-sqzCondStr = sqzOnCond ? (languageInput == "EN" ? "ON" : "ENCENDIDO") : sqzOffCond ? (languageInput == "EN" ? "OFF" : "APAGADO") : (languageInput == "EN" ? "MID" : "MEDIO")
-sqzCondSignal = sqzOnCond ? (languageInput == "EN" ? "Range" : "Rango") : // compression means range
-    sqzOffCond ? (trendCondition ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")) : (languageInput == "EN" ? "Range" : "Rango")
-sqzCondColor  = sqzOnCond ? color.orange : sqzOffCond ? (trendCondition ? color.lime : color.red) : color.yellow
+// Plot the 50-level midline with dynamic colour
+hline(50, title="Midline", color=midColour, linestyle=hline.style_dashed, linewidth=1)
 
-// === Build status panel ===
-if barstate.islast and showPanel
-    // Create table only once
-    var table statusTable = table.new(position.top_right, 3, 6, border_color=color.new(color.gray, 80), bgcolor=color.new(color.black, 90))
-    // Clear previous values each update
-    table.clear(statusTable)
-    // Header row
-    headerIndic = languageInput == "EN" ? "Indicator" : "Indicador"
-    headerStatus= languageInput == "EN" ? "Status"    : "Estado"
-    headerSignal= languageInput == "EN" ? "Signal"    : "Señal"
-    table.cell(statusTable, 0, 0, headerIndic, text_color=color.white, bgcolor=color.new(color.gray, 60))
-    table.cell(statusTable, 1, 0, headerStatus, text_color=color.white, bgcolor=color.new(color.gray, 60))
-    table.cell(statusTable, 2, 0, headerSignal, text_color=color.white, bgcolor=color.new(color.gray, 60))
-    // Row 1 – EMA status
-    row1Name   = languageInput == "EN" ? "EMA's" : "EMA's"
-    table.cell(statusTable, 0, 1, row1Name, text_color=color.white)
-    table.cell(statusTable, 1, 1, emaStatus, text_color=emaColor)
-    table.cell(statusTable, 2, 1, emaSignal, text_color=emaColor)
-    // Row 2 – Squeeze momentum
-    row2Name   = languageInput == "EN" ? "SQZMON" : "SQZMON"
-    table.cell(statusTable, 0, 2, row2Name, text_color=color.white)
-    table.cell(statusTable, 1, 2, sqzStatus, text_color=sqzColor)
-    table.cell(statusTable, 2, 2, sqzSignal, text_color=sqzColor)
-    // Row 3 – Volume profile
-    row3Name   = languageInput == "EN" ? "VPVP" : "VPVP"
-    table.cell(statusTable, 0, 3, row3Name, text_color=color.white)
-    table.cell(statusTable, 1, 3, vpStatus, text_color=vpColor)
-    table.cell(statusTable, 2, 3, vpSignal, text_color=vpColor)
-    // Row 4 – ADX
-    row4Name   = languageInput == "EN" ? "ADX" : "ADX"
-    table.cell(statusTable, 0, 4, row4Name, text_color=color.white)
-    table.cell(statusTable, 1, 4, adxStatus, text_color=adxColor)
-    table.cell(statusTable, 2, 4, adxSignal, text_color=adxColor)
-    // Row 5 – Squeeze ON/OFF summary
-    row5Name   = languageInput == "EN" ? "Squeeze" : "Squeeze"
-    table.cell(statusTable, 0, 5, row5Name, text_color=color.white)
-    table.cell(statusTable, 1, 5, sqzCondStr, text_color=sqzCondColor)
-    table.cell(statusTable, 2, 5, sqzCondSignal, text_color=sqzCondColor)
+// Plot RSI line and its moving average
+plot(showRSI ? rsiVal : na, title="RSI", color=color.new(rsiColourIntensified, 0), linewidth=2)
+plot(showRSI ? rsiMA  : na, title="RSI MA", color=color.new(color.orange, 0), linewidth=1)
+
+// Plot the cloud between RSI and its MA (fill area)
+plot(showCloud ? rsiVal : na, title="Cloud Top", color=color.new(cloudColour, 0), transp=100)
+plot(showCloud ? rsiMA  : na, title="Cloud Bottom", color=color.new(cloudColour, 0), transp=100)
+fill(plot1=showCloud ? rsiVal : na, plot2=showCloud ? rsiMA : na, color=color.new(cloudColour, cloudTransparency), title="RSI Cloud Fill")
+
+// Optional Bollinger Bands drawn on the RSI (experimental)
+int bbLength = 20
+float bbBasis = ta.sma(rsiVal, bbLength)
+float bbDev   = ta.stdev(rsiVal, bbLength)
+float bbUpper = bbBasis + 2.0 * bbDev
+float bbLower = bbBasis - 2.0 * bbDev
+plot(showBB ? bbUpper : na, title="BB Upper", color=color.new(color.blue, 0), linewidth=1)
+plot(showBB ? bbLower : na, title="BB Lower", color=color.new(color.blue, 0), linewidth=1)
+
+// Midline signals: plot symbols when RSI crosses 50 with DI agreement
+plotshape(showMidSig and longSignal,  title="Long Signal",  location=location.absolute, y=50, color=color.green, style=shape.labelup, text="L", textcolor=color.white, size=size.tiny)
+plotshape(showMidSig and shortSignal, title="Short Signal", location=location.absolute, y=50, color=color.red,   style=shape.labeldown, text="S", textcolor=color.white, size=size.tiny)
+
+// Cloud cross signals
+plotshape(showCloudSig and cloudCrossUp,   title="Cloud Cross Up",   location=location.absolute, y=rsiVal, color=color.green, style=shape.triangleup,   size=size.tiny, text="↑", textcolor=color.white)
+plotshape(showCloudSig and cloudCrossDown, title="Cloud Cross Down", location=location.absolute, y=rsiVal, color=color.red,   style=shape.triangledown, size=size.tiny, text="↓", textcolor=color.white)
+
+// Overbought/oversold cross signals
+plotshape(showOBOSsig and overboughtCross, title="Overbought Cross", location=location.absolute, y=rsiVal, color=color.red,   style=shape.circle, size=size.tiny)
+plotshape(showOBOSsig and oversoldCross,   title="Oversold Cross",   location=location.absolute, y=rsiVal, color=color.green, style=shape.circle, size=size.tiny)
+
+// Colour change signals (VR signals) – these appear when DI crosses and RSI colour changes
+plotshape(showMidSig and colourChangeUp,   title="Colour Change Up",   location=location.absolute, y=rsiVal, color=color.lime, style=shape.xcross, size=size.tiny)
+plotshape(showMidSig and colourChangeDown, title="Colour Change Down", location=location.absolute, y=rsiVal, color=color.maroon, style=shape.xcross, size=size.tiny)
+
+// === Alerts ===
+
+// Define unique identifiers for each alert condition. When adding alerts via
+// TradingView's interface, users can select any of the following names.
+alertcondition(longSignal,  title=t("long") + " (midline)", message=t("long") + " signal: RSI crossed above midline with trend confirmation on " + syminfo.ticker)
+alertcondition(shortSignal, title=t("short") + " (midline)", message=t("short") + " signal: RSI crossed below midline with trend confirmation on " + syminfo.ticker)
+alertcondition(colourChangeUp,   title=t("rsi_dir_up"),   message=t("rsi_dir_up") + ": RSI changed to bullish colour on " + syminfo.ticker)
+alertcondition(colourChangeDown, title=t("rsi_dir_down"), message=t("rsi_dir_down") + ": RSI changed to bearish colour on " + syminfo.ticker)
+alertcondition(cloudCrossUp,   title=t("cloud_cross") + " up",   message=t("cloud_cross") + " up on " + syminfo.ticker)
+alertcondition(cloudCrossDown, title=t("cloud_cross") + " down", message=t("cloud_cross") + " down on " + syminfo.ticker)
+alertcondition(overboughtCross, title=t("ob_cross"), message=t("ob_cross") + " on " + syminfo.ticker)
+alertcondition(oversoldCross,   title=t("os_cross"), message=t("os_cross") + " on " + syminfo.ticker)
+
+// === Bar colouring ===
+
+// Choose bar colouring based on user preference
+color barColor = na
+if barColouring == "RSI"
+    barColor := (rsiVal >= rsiMA ? (rsiVal >= overboughtInner ? color.new(color.red, 30) : (rsiVal <= oversoldInner ? color.new(color.green, 30) : color.new(color.green, 0))) : (rsiVal <= oversoldInner ? color.new(color.green, 30) : color.new(color.red, 0)))
+else if barColouring == "ADX"
+    barColor := diBullish ? color.new(color.green, 0) : diBearish ? color.new(color.red, 0) : na
+
+barcolor(barColouring == "None" ? na : barColor)
+
+// === Information panel ===
+
+if showPanel
+    // Determine panel dimensions based on selection
+    int rows = 3
+    int cols = 2
+    int pad  = 1
+    // Adjust font size and table location depending on panel size
+    int panelFontSize = panelSize == "Tiny" ? 6 : panelSize == "Small" ? 8 : panelSize == "Normal" ? 10 : 12
+    // Create table once
+    var table infoTable = table.new(position=table.position.top_right, columns=cols, rows=rows, frame_width=1, frame_color=color.new(color.gray, 70), border_width=1, border_color=color.new(color.gray, 70))
+    // Fill first column with labels
+    table.cell(infoTable, 0, 0, t("panel_rsi"), bgcolor=color.new(color.black, 85), text_color=color.white, text_size=panelFontSize)
+    table.cell(infoTable, 0, 1, t("panel_adx"), bgcolor=color.new(color.black, 85), text_color=color.white, text_size=panelFontSize)
+    table.cell(infoTable, 0, 2, t("panel_action"), bgcolor=color.new(color.black, 85), text_color=color.white, text_size=panelFontSize)
+    // Display RSI value and arrow
+    string rsiStatus = str.tostring(rsiVal, "#.##") + (rsiRising ? " ↑" : " ↓")
+    table.cell(infoTable, 1, 0, rsiStatus, bgcolor=color.new(color.dark_gray, 70), text_color=color.white, text_size=panelFontSize)
+    // Display ADX value and arrow
+    string adxStatus = str.tostring(adxVal, "#.##") + (adxRising ? " ↑" : " ↓")
+    table.cell(infoTable, 1, 1, adxStatus, bgcolor=color.new(color.dark_gray, 70), text_color=color.white, text_size=panelFontSize)
+    // Display trend strength and direction
+    string trendStatus = adxStrong ? (diBullish ? t("strong_up") : t("strong_down")) : adxRange ? (diBullish ? t("weak_up") : t("weak_down")) : t("neutral")
+    table.cell(infoTable, 1, 2, trendStatus, bgcolor=color.new(color.dark_gray, 70), text_color=color.white, text_size=panelFontSize)
+    // Leave the last row blank for spacing
+    table.cell(infoTable, 2, 0, "", bgcolor=color.new(color.black, 85), text_color=color.white, text_size=panelFontSize)
+    table.cell(infoTable, 2, 1, "", bgcolor=color.new(color.black, 85), text_color=color.white, text_size=panelFontSize)
+    table.cell(infoTable, 2, 2, "", bgcolor=color.new(color.black, 85), text_color=color.white, text_size=panelFontSize)
+
+// Apply background shading based on ADX strength outside the panel to avoid drawing behind the table
+bgcolor(bgColour)
