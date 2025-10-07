@@ -1,0 +1,317 @@
+//@version=6
+// ##################################################################################
+//  APIDEVs TL Strategy (Multi‑language)
+//
+//  This script reproduces the functionality showcased in the TradingLatino
+//  ecosystem of indicators as described in the APIDEVs documentation and
+//  accompanying video.  It combines several well‑known technical studies:
+//    • Exponential moving average band to visualize trend and detect crossovers.
+//    • Average Directional Index (ADX) with directional (DI+/DI−) lines to
+//      colour the ADX according to trend strength and direction.  Horizontal
+//      thresholds mark regions of strong trend and lack of interest.
+//    • John Carter’s TTM Squeeze momentum oscillator (LazyBear version) to
+//      separate momentum into “impulse” and “force” quadrants.  Colours and
+//      names change depending on whether momentum is increasing or decreasing.
+//    • A simplified fixed‑range volume profile computed over the last N bars
+//      based on volume‑weighted average price (VWAP) to estimate whether price
+//      trades above or below the high‑volume area.
+//    • Automated long/short signals combining the oscillator’s impulse phases
+//      with the ADX directional bias and optional EMA trend filter.  Only one
+//      signal is emitted per impulse quadrant when enabled.
+//    • A status panel summarising the state of each component.  Texts and
+//      labels automatically translate between Spanish and English depending on
+//      the selected language.
+//
+//  Please note that this indicator is for educational purposes only.  It
+//  illustrates how to combine multiple studies and present their state in a
+//  concise panel.  Do not rely on it as a complete trading system without
+//  further testing and risk management.
+
+// ##################################################################################
+// === Inputs ===
+// Language toggle
+languageInput   = input.string(
+    title="Idioma / Language",
+    defval="ES",
+    options=["ES", "EN"],
+    tooltip="Select ES for Español or EN for English.  Elija ES para Español o EN para Inglés."
+)
+
+// Exponential moving averages
+fastLen         = input.int(title="Fast EMA length", defval=50, minval=1)
+slowLen         = input.int(title="Slow EMA length", defval=200, minval=1, tooltip="Length of the slower moving average.  A longer period defines the major trend.")
+showEMABand     = input.bool(title="Show EMA band", defval=true, tooltip="Toggle visibility of the coloured EMA band on the price chart.")
+
+// ADX and Directional Movement settings
+adxLen          = input.int(title="ADX length", defval=14, minval=1)
+diLen           = input.int(title="DI length", defval=14, minval=1)
+adxLowLvl       = input.float(title="ADX low threshold", defval=17.0, minval=1.0, tooltip="Below this level price action is considered lacking interest (range).  Suggested values: 15–23.")
+adxHighLvl      = input.float(title="ADX high threshold", defval=30.0, minval=1.0, tooltip="Above this level the trend is considered very strong.  Suggested values: 30–35.")
+showADX         = input.bool(title="Show ADX indicator", defval=true, tooltip="If enabled, plots the coloured ADX line and its thresholds.")
+colourBarsADX   = input.bool(title="Colour candles by DI cross", defval=true, tooltip="Paint price bars green or red depending on DI+ / DI− cross.")
+
+// Squeeze Momentum (LazyBear TTM Squeeze)
+showSqueeze     = input.bool(title="Show Squeeze oscillator", defval=true)
+sqzBBLen        = input.int(title="Bollinger Bands length", defval=20, minval=1)
+sqzBBMult       = input.float(title="Bollinger Bands multiplier", defval=2.0, step=0.1)
+sqzKCLen        = input.int(title="Keltner Channel length", defval=20, minval=1)
+sqzKCMult       = input.float(title="Keltner Channel multiplier", defval=1.5, step=0.1)
+sqzMomLen       = input.int(title="Linear momentum length", defval=20, minval=1, tooltip="Length of the linear regression used for the momentum histogram.")
+useEMAfilter    = input.bool(title="Filter signals by EMA trend", defval=true, tooltip="Only permit long signals when the fast EMA is below the slow EMA (bearish trend) and short signals when the fast EMA is above (bullish trend).  Disable to see all impulses.")
+oneSigPerQuad   = input.bool(title="Limit to one signal per impulse quadrant", defval=true)
+
+// Volume profile / VWAP approximation
+showVP          = input.bool(title="Show volume profile line", defval=true)
+vpLookback      = input.int(title="Volume profile lookback bars", defval=75, minval=10, tooltip="Number of previous bars used to compute the simplified volume profile (VWAP).")
+
+// Panel options
+showPanel       = input.bool(title="Show status panel", defval=true)
+panelX          = input.int(title="Panel horizontal offset", defval=2, minval=0, maxval=100, tooltip="Horizontal offset of the status panel measured in chart columns.")
+panelY          = input.int(title="Panel vertical offset", defval=20, minval=0, maxval=100, tooltip="Vertical offset of the status panel measured in chart rows.")
+
+// === Internal calculations ===
+// Compute EMAs
+fastEMA = ta.ema(close, fastLen)
+slowEMA = ta.ema(close, slowLen)
+
+// Determine trend colour for the EMA band
+var color emaColour = color.new(color.gray, 0)
+trendCondition = fastEMA > slowEMA
+// Colour logic: green for bullish, red for bearish, orange on crossover
+emaUpColour   = color.new(color.lime, 0)
+emaDownColour = color.new(color.red, 0)
+emaCrossColour= color.new(color.orange, 0)
+// Determine if a crossover occurred this bar
+emaCross      = ta.cross(fastEMA, slowEMA)
+emaColour     := emaCross ? emaCrossColour : trendCondition ? emaUpColour : emaDownColour
+
+// Plot EMA band (between fast and slow) if enabled
+if showEMABand
+    ema1 = plot(fastEMA, color=color.new(color.transparent, 0), title="Fast EMA")
+    ema2 = plot(slowEMA, color=color.new(color.transparent, 0), title="Slow EMA")
+    fill(ema1, ema2, color=emaColour, title="EMA Band")
+
+// === ADX and DI calculations ===
+// Directional movement helper (returns plus and minus DI)
+f_dirmov(int len) =>
+    up   = ta.change(high)
+    down = -ta.change(low)
+    trur = ta.rma(ta.tr(true), len)
+    plusDM  = 100 * ta.rma((up > down and up > 0 ? up : 0), len) / trur
+    minusDM = 100 * ta.rma((down > up and down > 0 ? down : 0), len) / trur
+    [plusDM, minusDM]
+
+// ADX calculation
+f_adx(int dilen, int adxlen) =>
+    [plusDM, minusDM] = f_dirmov(dilen)
+    sumDM    = plusDM + minusDM
+    dx       = 100 * ta.rma(math.abs(plusDM - minusDM) / (sumDM == 0 ? 1 : sumDM), adxlen)
+    [dx, plusDM, minusDM]
+
+[adxValue, diPlus, diMinus] = f_adx(diLen, adxLen)
+
+// Determine ADX colour based on DI cross and whether ADX is rising or falling
+isRisingADX = adxValue > adxValue[1]
+adxUpColour   = color.new(color.lime, 0)
+adxDownColour = color.new(color.red, 0)
+adxUpWeak     = color.new(color.rgb(46, 245, 39), 50)
+adxDownWeak   = color.new(color.rgb(217, 6, 6), 50)
+// Base colour: orange when below low threshold (disinterest)
+adxFlatColour = color.new(color.orange, 0)
+// Choose final colour
+adxColour = diPlus > diMinus ? (isRisingADX ? adxUpColour : adxUpWeak) : (diMinus > diPlus ? (isRisingADX ? adxDownColour : adxDownWeak) : adxFlatColour)
+// If ADX below low threshold, override with flat colour
+adxColour := adxValue < adxLowLvl ? adxFlatColour : adxColour
+
+// Optionally colour price bars by DI direction
+if colourBarsADX
+    barColor = diPlus > diMinus ? color.new(color.lime, 30) : diPlus < diMinus ? color.new(color.red, 30) : color.gray
+    barcolor(barColor)
+
+// Plot ADX and thresholds if enabled
+if showADX
+    plot(adxValue, title="ADX", color=adxColour, linewidth=2)
+    hLow  = hline(adxLowLvl, title="ADX Low", linestyle=hline.style_dotted, color=color.gray)
+    hHigh = hline(adxHighLvl, title="ADX High", linestyle=hline.style_dotted, color=color.gray)
+
+// === Squeeze Momentum Indicator ===
+// Compute Bollinger Bands
+sqzSource  = close
+sqzBasis   = ta.sma(sqzSource, sqzBBLen)
+sqzDev     = sqzBBMult * ta.stdev(sqzSource, sqzBBLen)
+sqzUpperBB = sqzBasis + sqzDev
+sqzLowerBB = sqzBasis - sqzDev
+// Compute Keltner Channels
+kcBasis    = ta.sma(sqzSource, sqzKCLen)
+kcRange    = ta.tr(true)
+kcDev      = ta.sma(kcRange, sqzKCLen) * sqzKCMult
+sqzUpperKC = kcBasis + kcDev
+sqzLowerKC = kcBasis - kcDev
+// Determine squeeze condition
+sqzOnCond  = (sqzLowerBB > sqzLowerKC) and (sqzUpperBB < sqzUpperKC)
+sqzOffCond = (sqzLowerBB < sqzLowerKC) and (sqzUpperBB > sqzUpperKC)
+sqzNeutral = not sqzOnCond and not sqzOffCond
+
+// Compute momentum oscillator using LazyBear’s formula
+// This is a linear regression of the difference between price and an average of
+// highest/lowest and the moving average.  The resulting histogram oscillates
+// around zero; increases in magnitude indicate stronger momentum.
+meanHighLow  = (ta.highest(high, sqzMomLen) + ta.lowest(low, sqzMomLen)) / 2
+meanClose    = ta.sma(close, sqzMomLen)
+rawMomentum  = close - math.avg(meanHighLow, meanClose)
+val          = ta.linreg(rawMomentum, sqzMomLen, 0)
+
+// Determine colours and quadrant names for the histogram
+isIncreasing = val > nz(val[1])
+isDecreasing = val < nz(val[1])
+momentumColour = val > 0 ? (isIncreasing ? color.rgb(46, 245, 39) : color.rgb(16, 120, 13)) : val < 0 ? (isDecreasing ? color.rgb(217, 6, 6) : color.rgb(98, 0, 0)) : color.gray
+
+// Quadrant names based on momentum colour
+quadrantNameES = val > 0 ? (isIncreasing ? "Impulso Alcista" : "Fuerza Alcista") : val < 0 ? (isDecreasing ? "Impulso Bajista" : "Fuerza Bajista") : "Sin cambio"
+quadrantNameEN = val > 0 ? (isIncreasing ? "Bullish Impulse" : "Bullish Force") : val < 0 ? (isDecreasing ? "Bearish Impulse" : "Bearish Force") : "Flat"
+quadrantName   = languageInput == "EN" ? quadrantNameEN : quadrantNameES
+// Momentum arrows for the panel
+quadArrow      = val > 0 ? "↗" : val < 0 ? "↘" : "→"
+
+// Plot squeeze histogram
+if showSqueeze
+    plot(val, title="Squeeze Histogram", style=plot.style_columns, color=momentumColour, linewidth=3)
+    // Optional crosses to indicate squeeze on/off
+    plotshape(sqzOnCond, title="Squeeze On", style=shape.cross, location=location.bottom, color=color.gray, size=size.tiny)
+    plotshape(sqzOffCond, title="Squeeze Off", style=shape.cross, location=location.bottom, color=color.black, size=size.tiny)
+
+// === Simplified Volume Profile (VWAP) ===
+// Use a rolling volume‑weighted average price to approximate the POC of a fixed
+// range.  We avoid the overhead of full price binning and instead compute the
+// volume weighted mean price.  This is sufficient for determining whether
+// current price is above or below the high‑volume area.
+vwapNumerator   = ta.sum(volume * hl2, vpLookback)
+vwapDenominator = ta.sum(volume, vpLookback)
+vpocPrice       = vwapDenominator != 0 ? vwapNumerator / vwapDenominator : na
+
+// Plot the volume profile line on the price chart if requested
+if showVP and not na(vpocPrice)
+    vpColor = close > vpocPrice ? color.new(color.lime, 40) : color.new(color.red, 40)
+    line.new(x1=bar_index[1], y1=vpocPrice[1], x2=bar_index, y2=vpocPrice, extend=extend.right, color=vpColor, width=2, style=line.style_dashed, title="Volume Profile POC")
+
+// === Signal generation ===
+// Basic ADX direction: positive trend if DI+ > DI−, negative otherwise
+adxDirUp    = diPlus > diMinus
+adxDirDown  = diMinus > diPlus
+
+// Determine if momentum is in impulse quadrant
+impulseUp   = val > 0 and val > val[1]
+impulseDown = val < 0 and val < val[1]
+
+// Generate raw buy and sell signals based on momentum impulse and ADX direction
+longRaw  = impulseUp and adxDirDown   // bullish impulse after bearish trend
+shortRaw = impulseDown and adxDirUp   // bearish impulse after bullish trend
+
+// Apply EMA trend filter if enabled
+bool allowLong  = not useEMAfilter or slowEMA > fastEMA  // bearish trend means allow longs (looking for reversal)
+bool allowShort = not useEMAfilter or fastEMA > slowEMA  // bullish trend means allow shorts (looking for reversal)
+longSignalRaw   := longRaw and allowLong
+shortSignalRaw  := shortRaw and allowShort
+
+// Apply one‑signal‑per‑quadrant filter
+var int lastSigQuadrant = 0
+int thisQuadrant = impulseUp ? 1 : impulseDown ? -1 : 0
+bool longSignal  = longSignalRaw
+bool shortSignal = shortSignalRaw
+if oneSigPerQuad
+    if thisQuadrant == lastSigQuadrant
+        // ignore subsequent signals in the same impulse quadrant
+        longSignal  := false
+        shortSignal := false
+    else
+        // update quadrant on first signal
+        if longSignalRaw or shortSignalRaw
+            lastSigQuadrant := thisQuadrant
+
+// Plot signal markers on the price chart
+plotshape(longSignal, title="Buy Signal", location=location.belowbar, color=color.new(color.lime, 0), style=shape.labelup, text="B", size=size.tiny, textcolor=color.black, offset=0)
+plotshape(shortSignal, title="Sell Signal", location=location.abovebar, color=color.new(color.red, 0), style=shape.labeldown, text="S", size=size.tiny, textcolor=color.white, offset=0)
+
+// Alert conditions to allow automation and notifications
+alertcondition(longSignal, title="Long alert", message="APIDEVs TL Strategy Long signal on {{ticker}} @ {{close}}")
+alertcondition(shortSignal, title="Short alert", message="APIDEVs TL Strategy Short signal on {{ticker}} @ {{close}}")
+alertcondition(ta.crossover(adxValue, adxHighLvl), title="ADX entered strong trend", message="ADX has crossed above the high threshold on {{ticker}}")
+alertcondition(ta.crossunder(adxValue, adxLowLvl), title="ADX entered low interest", message="ADX has crossed below the low threshold on {{ticker}}")
+alertcondition(sqzOnCond, title="Squeeze On", message="Squeeze compression ON on {{ticker}}")
+alertcondition(sqzOffCond, title="Squeeze Off", message="Squeeze compression OFF on {{ticker}}")
+
+// === Status classification for panel ===
+// EMA status and recommendation
+emaStatus  = trendCondition ?
+    (languageInput == "EN" ? str.tostring(fastLen) + " > " + str.tostring(slowLen) : str.tostring(fastLen) + " > " + str.tostring(slowLen)) :
+    (languageInput == "EN" ? str.tostring(fastLen) + " < " + str.tostring(slowLen) : str.tostring(fastLen) + " < " + str.tostring(slowLen))
+emaSignal  = trendCondition ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")
+emaColor   = trendCondition ? color.lime : color.red
+
+// Squeeze momentum status
+sqzStatus  = quadrantName + " " + quadArrow
+// Determine suggestion: Impulse suggests direction; Force suggests range
+sqzSignal  = impulseUp ? (languageInput == "EN" ? "Long" : "Largo") : impulseDown ? (languageInput == "EN" ? "Short" : "Corto") : (languageInput == "EN" ? "Range" : "Rango")
+sqzColor   = impulseUp ? color.lime : impulseDown ? color.red : color.orange
+
+// Volume profile status
+vpStatus   = not na(vpocPrice) ? (close > vpocPrice ? (languageInput == "EN" ? "Above" : "Encima") : (languageInput == "EN" ? "Below" : "Debajo")) : (languageInput == "EN" ? "N/A" : "N/D")
+vpSignal   = not na(vpocPrice) ? (close > vpocPrice ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")) : (languageInput == "EN" ? "Range" : "Rango")
+vpColor    = not na(vpocPrice) ? (close > vpocPrice ? color.lime : color.red) : color.orange
+
+// ADX status
+// Show value rounded to whole number
+adxValStr  = str.tostring(math.round(adxValue))
+adxArrow   = adxValue > adxValue[1] ? "↗" : "↘"
+adxStateEN = adxValue < adxLowLvl ? "No Trend" : adxValue > adxHighLvl ? "Strong" : "Weak"
+adxStateES = adxValue < adxLowLvl ? "Sin Tendencia" : adxValue > adxHighLvl ? "Fuerte" : "Débil"
+adxState   = languageInput == "EN" ? adxStateEN : adxStateES
+adxStatus  = adxValStr + " " + adxArrow + " " + adxState
+// ADX recommendation: strong trend uses DI direction; otherwise range
+adxSignal  = adxValue < adxLowLvl ? (languageInput == "EN" ? "Range" : "Rango") : adxValue > adxHighLvl ? (diPlus > diMinus ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")) : (languageInput == "EN" ? "Range" : "Rango")
+adxColor   = adxValue < adxLowLvl ? color.orange : adxValue > adxHighLvl ? (diPlus > diMinus ? color.lime : color.red) : color.yellow
+
+// Squeeze ON/OFF status
+sqzCondStr = sqzOnCond ? (languageInput == "EN" ? "ON" : "ENCENDIDO") : sqzOffCond ? (languageInput == "EN" ? "OFF" : "APAGADO") : (languageInput == "EN" ? "MID" : "MEDIO")
+sqzCondSignal = sqzOnCond ? (languageInput == "EN" ? "Range" : "Rango") : // compression means range
+    sqzOffCond ? (trendCondition ? (languageInput == "EN" ? "Long" : "Largo") : (languageInput == "EN" ? "Short" : "Corto")) : (languageInput == "EN" ? "Range" : "Rango")
+sqzCondColor  = sqzOnCond ? color.orange : sqzOffCond ? (trendCondition ? color.lime : color.red) : color.yellow
+
+// === Build status panel ===
+if barstate.islast and showPanel
+    // Create table only once
+    var table statusTable = table.new(position.top_right, 3, 6, border_color=color.new(color.gray, 80), bgcolor=color.new(color.black, 90))
+    // Clear previous values each update
+    table.clear(statusTable)
+    // Header row
+    headerIndic = languageInput == "EN" ? "Indicator" : "Indicador"
+    headerStatus= languageInput == "EN" ? "Status"    : "Estado"
+    headerSignal= languageInput == "EN" ? "Signal"    : "Señal"
+    table.cell(statusTable, 0, 0, headerIndic, text_color=color.white, bgcolor=color.new(color.gray, 60))
+    table.cell(statusTable, 1, 0, headerStatus, text_color=color.white, bgcolor=color.new(color.gray, 60))
+    table.cell(statusTable, 2, 0, headerSignal, text_color=color.white, bgcolor=color.new(color.gray, 60))
+    // Row 1 – EMA status
+    row1Name   = languageInput == "EN" ? "EMA's" : "EMA's"
+    table.cell(statusTable, 0, 1, row1Name, text_color=color.white)
+    table.cell(statusTable, 1, 1, emaStatus, text_color=emaColor)
+    table.cell(statusTable, 2, 1, emaSignal, text_color=emaColor)
+    // Row 2 – Squeeze momentum
+    row2Name   = languageInput == "EN" ? "SQZMON" : "SQZMON"
+    table.cell(statusTable, 0, 2, row2Name, text_color=color.white)
+    table.cell(statusTable, 1, 2, sqzStatus, text_color=sqzColor)
+    table.cell(statusTable, 2, 2, sqzSignal, text_color=sqzColor)
+    // Row 3 – Volume profile
+    row3Name   = languageInput == "EN" ? "VPVP" : "VPVP"
+    table.cell(statusTable, 0, 3, row3Name, text_color=color.white)
+    table.cell(statusTable, 1, 3, vpStatus, text_color=vpColor)
+    table.cell(statusTable, 2, 3, vpSignal, text_color=vpColor)
+    // Row 4 – ADX
+    row4Name   = languageInput == "EN" ? "ADX" : "ADX"
+    table.cell(statusTable, 0, 4, row4Name, text_color=color.white)
+    table.cell(statusTable, 1, 4, adxStatus, text_color=adxColor)
+    table.cell(statusTable, 2, 4, adxSignal, text_color=adxColor)
+    // Row 5 – Squeeze ON/OFF summary
+    row5Name   = languageInput == "EN" ? "Squeeze" : "Squeeze"
+    table.cell(statusTable, 0, 5, row5Name, text_color=color.white)
+    table.cell(statusTable, 1, 5, sqzCondStr, text_color=sqzCondColor)
+    table.cell(statusTable, 2, 5, sqzCondSignal, text_color=sqzCondColor)
