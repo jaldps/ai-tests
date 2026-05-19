@@ -1,0 +1,68 @@
+# Constructing the Polynomial and Computing p(19)
+
+## Choosing the Polynomial
+
+I need $p(x) - p(y)$ to have at least 3 irreducible components in $\mathbb{P}^1 \times \mathbb{P}^1$. The key insight is to use **Dickson polynomials** (equivalently, scaled Chebyshev polynomials).
+
+The Dickson polynomial $D_n(x, a)$ satisfies $D_n(u + a/u, a) = u^n + (a/u)^n$. Setting $a = 1$ and $n = 19$:
+
+$$p(x) = D_{19}(x, 1) = 2T_{19}(x/2)$$
+
+where $T_{19}$ is the 19th Chebyshev polynomial of the first kind.
+
+## Verifying the Properties
+
+**Explicit form:** $D_{19}(x, 1) = \sum_{j=0}^{9} \frac{19}{19-j}\binom{19-j}{j}(-1)^j x^{19-2j}$
+
+$$p(x) = x^{19} - 19x^{17} + 152x^{15} - 665x^{13} + 1729x^{11} - \cdots - 19x$$
+
+- **Degree 19, monic:** Leading term is $x^{19}$ ✓
+- **Odd:** Only odd powers appear ✓
+- **Real (integer) coefficients** ✓
+- **Linear coefficient:** The $j=9$ term gives $\frac{19}{10}\binom{10}{9}(-1)^9 x = -19x$ ✓
+
+## Irreducible Components
+
+Since $p(x) = u^{19} + u^{-19}$ where $x = u + u^{-1}$, the equation $p(x) = p(y)$ gives $u^{19} + u^{-19} = v^{19} + v^{-19}$, which factors into:
+
+$$p(x) - p(y) = (x - y) \prod_{k=1}^{9} \left(x^2 - 2\cos\!\tfrac{2\pi k}{19}\, xy + y^2 - 4\sin^2\!\tfrac{2\pi k}{19}\right)$$
+
+This yields **10 irreducible components** over $\mathbb{C}$: 1 linear (the diagonal) and 9 quadratic (irreducible since their discriminants $4\sin^2(\frac{2\pi k}{19})(4 - y^2)$ are not perfect squares in $\mathbb{C}[y]$).
+
+## Computing $p(19)$
+
+Setting $x = 19$: since $19/2 = \cosh t$ gives $e^t = \frac{19 + \sqrt{357}}{2}$, we get:
+
+$$p(19) = 2T_{19}(19/2) = \left(\frac{19+\sqrt{357}}{2}\right)^{19} + \left(\frac{19-\sqrt{357}}{2}\right)^{19}$$
+
+Let $a, b = \frac{19 \pm \sqrt{357}}{2}$, so $a + b = 19$, $ab = 1$. Define $S_n = a^n + b^n$, satisfying:
+$$S_n = 19S_{n-1} - S_{n-2}, \quad S_0 = 2,\ S_1 = 19$$
+
+Computing iteratively:
+
+| $n$ | $S_n$ |
+|-----|--------|
+| 0 | 2 |
+| 1 | 19 |
+| 2 | 359 |
+| 3 | 6,802 |
+| 4 | 128,879 |
+| 5 | 2,441,899 |
+| 6 | 46,267,202 |
+| 7 | 876,634,939 |
+| 8 | 16,609,796,639 |
+| 9 | 314,709,501,202 |
+| 10 | 5,962,870,726,199 |
+| 11 | 112,979,834,296,579 |
+| 12 | 2,140,653,980,908,802 |
+| 13 | 40,559,445,802,970,659 |
+| 14 | 768,488,816,275,533,719 |
+| 15 | 14,560,728,063,432,170,002 |
+| 16 | 275,885,344,388,935,696,319 |
+| 17 | 5,227,260,815,326,346,060,059 |
+| 18 | 99,042,070,146,811,639,444,802 |
+| 19 | 1,876,572,071,974,094,803,391,179 |
+
+Verified via modular arithmetic (mod 7, 9, 10, 11, 13, 17).
+
+$$\boxed{p(19) = 1876572071974094803391179}$$
