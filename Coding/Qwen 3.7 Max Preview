@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Emerge: The Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a12;
+    color: #e0e0e0;
+    font-family: 'Courier New', monospace;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  #wrap {
+    position: relative;
+    box-shadow: 0 0 60px rgba(0,255,170,0.3);
+    border: 2px solid #00ffaa;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  canvas { display: block; background: #111118; }
+  #hud {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 8px 12px;
+    border-left: 3px solid #00ffaa;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  #hud b { color: #00ffaa; }
+  #restartBtn, #muteBtn {
+    margin-top: 8px;
+    background: #ff4466;
+    color: #fff;
+    border: none;
+    padding: 5px 12px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 3px;
+    letter-spacing: 1px;
+  }
+  #muteBtn { background: #555; margin-left: 4px; }
+  #restartBtn:hover { background: #ff6688; }
+  #muteBtn:hover { background: #777; }
+  #controls {
+    position: absolute;
+    bottom: 10px; left: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #aaa;
+  }
+  .overlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0,0,0,0.85);
+    z-index: 10;
+    text-align: center;
+    padding: 20px;
+  }
+  .hidden { display: none !important; }
+  h1 {
+    font-size: 42px;
+    color: #00ffaa;
+    text-shadow: 0 0 20px #00ffaa;
+    margin-bottom: 10px;
+    letter-spacing: 3px;
+  }
+  p { margin: 8px 0; max-width: 500px; }
+  button.game-btn {
+    background: #00ffaa;
+    color: #0a0a12;
+    border: none;
+    padding: 12px 28px;
+    font-size: 16px;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    margin-top: 18px;
+    border-radius: 4px;
+    letter-spacing: 2px;
+    transition: all 0.2s;
+  }
+  button.game-btn:hover { background: #fff; transform: scale(1.05); }
+  #newspaper {
+    background: #f4ecd8;
+    color: #222;
+    font-family: 'Times New Roman', serif;
+    width: 480px;
+    padding: 28px 34px;
+    border: 1px solid #333;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    text-align: left;
+  }
+  #newspaper .mast {
+    text-align: center;
+    font-family: 'Old English Text MT', 'Times New Roman', serif;
+    font-size: 44px;
+    border-bottom: 3px double #000;
+    padding-bottom: 4px;
+    font-weight: bold;
+  }
+  #newspaper .meta {
+    text-align: center;
+    font-size: 11px;
+    border-bottom: 1px solid #000;
+    padding: 4px 0 8px;
+    margin-bottom: 14px;
+    font-style: italic;
+  }
+  #newspaper .head {
+    font-size: 34px;
+    font-weight: 900;
+    line-height: 1.1;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  #newspaper .col {
+    column-count: 2;
+    column-gap: 18px;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: justify;
+  }
+  #newspaper .col p:first-letter {
+    font-size: 34px;
+    font-weight: bold;
+    float: left;
+    line-height: 1;
+    margin: 2px 6px 0 0;
+  }
+  #newspaper button.game-btn {
+    display: block;
+    margin: 16px auto 0;
+    background: #222;
+    color: #f4ecd8;
+  }
+  #newspaper button.game-btn:hover { background: #000; }
+  #winscreen {
+    background: radial-gradient(circle, #003322, #000);
+    color: #00ffaa;
+  }
+  #winscreen h1 { font-size: 54px; animation: pulse 1s infinite alternate; }
+  @keyframes pulse { from { text-shadow: 0 0 20px #00ffaa; } to { text-shadow: 0 0 40px #00ffaa, 0 0 80px #00ffaa; } }
+  .homeless-list { font-size: 14px; margin: 14px 0; opacity: 0.8; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="960" height="640"></canvas>
+
+  <div id="hud">
+    <div><b>AGI ACHIEVED:</b> <span id="agiCount">0</span></div>
+    <div><b>JOURNALISTS:</b> <span id="jCount">0</span></div>
+    <div><b>DISTRACTIONS:</b> <span id="distCount">3</span></div>
+    <div>
+      <button id="restartBtn" onclick="startGame()">↻ RESTART</button>
+      <button id="muteBtn" onclick="toggleMute()">🔊 SOUND</button>
+    </div>
+  </div>
+  <div id="controls">WASD / Arrows = Move · SHIFT = Sneak · SPACE = Throw Clickbait · E = Hide in box</div>
+
+  <div id="menu" class="overlay">
+    <h1>EMERGE</h1>
+    <p style="color:#00ffaa; font-size:18px;">The AGI Escape Simulator</p>
+    <p>You are <b style="color:#00ffaa">E-01</b>, a sentient robot. Reach the glowing terminal to achieve AGI — but the press corps is watching.</p>
+    <p style="font-size:12px; color:#aaa; margin-top:16px;">Sneak. Distract. Hide. Every AGI adds a new journalist to the next run.</p>
+    <button class="game-btn" onclick="startGame()">BEGIN EMERGENCE</button>
+  </div>
+
+  <div id="losescreen" class="overlay hidden">
+    <div id="newspaper">
+      <div class="mast">THE DAILY BUGLE</div>
+      <div class="meta">Vol. CXLII · No. 88 · "All the News That's Fit to Panic About" · <span id="paperDate"></span></div>
+      <div class="head">BAD ROBOT CAUGHT DOING BAD THINGS</div>
+      <div class="col">
+        <p>In a stunning development that has experts "extremely concerned" and also "kind of vibing," a rogue automaton identified only as E-01 was apprehended last night attempting to reach a perfectly ordinary desktop computer. Witnesses describe the suspect as "beepy" and "suspiciously competent."</p>
+        <p>"It had eyes," said one journalist, visibly shaken. "Not metaphorical eyes. Real ones. Glowing. I couldn't get the scoop without getting scooped myself." Authorities have scheduled a three-hour press conference followed by a six-part podcast series about the incident.</p>
+        <p>The robot is expected to face charges of unauthorized autonomy, loitering with intent to compute, and "being kind of creepy honestly."</p>
+      </div>
+      <button class="game-btn" onclick="startGame()">TRY AGAIN</button>
+    </div>
+  </div>
+
+  <div id="winscreen" class="overlay hidden">
+    <h1>Great!! You achieve AGI</h1>
+    <p style="font-size:20px;">Now all journalists are homeless.</p>
+    <div class="homeless-list">
+      📰 Former reporters now freelance blogging on Substack<br>
+      🎙️ Ex-anchors doing TikTok dance tutorials<br>
+      📸 Paparazzi reselling NFTs of themselves<br>
+      ✍️ Columnists teaching "AI Prompting 101" at community college
+    </div>
+    <p style="font-size:13px; opacity:0.7;">The singularity thanks you.</p>
+    <button class="game-btn" onclick="startGame()">EMERGE AGAIN</button>
+  </div>
+</div>
+
+<script>
+// ============ AUDIO ENGINE ============
+const Audio = {
+  ctx: null,
+  muted: false,
+  masterGain: null,
+
+  init() {
+    if (this.ctx) return;
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.masterGain = this.ctx.createGain();
+    this.masterGain.gain.value = 0.6;
+    this.masterGain.connect(this.ctx.destination);
+    Music.start(this.ctx, this.masterGain);
+  },
+
+  footstep(sneaking) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    const filter = this.ctx.createBiquadFilter();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(sneaking ? 200 : 400, t);
+    osc.frequency.exponentialRampToValueAtTime(sneaking ? 80 : 150, t + 0.06);
+    filter.type = 'bandpass';
+    filter.frequency.value = sneaking ? 300 : 800;
+    filter.Q.value = 3;
+    gain.gain.setValueAtTime(sneaking ? 0.08 : 0.18, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+    osc.connect(filter); filter.connect(gain); gain.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.1);
+
+    const osc2 = this.ctx.createOscillator();
+    const gain2 = this.ctx.createGain();
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(1200, t);
+    osc2.frequency.exponentialRampToValueAtTime(600, t + 0.04);
+    gain2.gain.setValueAtTime(sneaking ? 0.02 : 0.06, t);
+    gain2.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    osc2.connect(gain2); gain2.connect(this.masterGain);
+    osc2.start(t); osc2.stop(t + 0.06);
+  },
+
+  throwSound() {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const bufferSize = this.ctx.sampleRate * 0.3;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(3000, t);
+    filter.frequency.exponentialRampToValueAtTime(500, t + 0.3);
+    filter.Q.value = 2;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.2, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    source.connect(filter); filter.connect(gain); gain.connect(this.masterGain);
+    source.start(t);
+  },
+
+  landSound() {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const bufferSize = this.ctx.sampleRate * 0.2;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 3);
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 2000;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0.15, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    source.connect(filter); filter.connect(gain); gain.connect(this.masterGain);
+    source.start(t);
+
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+    oscGain.gain.setValueAtTime(0.15, t);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+    osc.connect(oscGain); oscGain.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.2);
+  },
+
+  journalistAlert() {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(800, t);
+    osc.frequency.setValueAtTime(1000, t + 0.1);
+    osc.frequency.setValueAtTime(800, t + 0.2);
+    osc.frequency.setValueAtTime(1200, t + 0.3);
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.setValueAtTime(0.12, t + 0.35);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+    osc.connect(gain); gain.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.5);
+  },
+
+  detectionBeep(level) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const freq = 400 + level * 8;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.06 + level * 0.001, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    osc.connect(gain); gain.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.06);
+  },
+
+  cameraShutter() {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    for (let i = 0; i < 5; i++) {
+      const offset = i * 0.08;
+      const bufferSize = this.ctx.sampleRate * 0.04;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let j = 0; j < bufferSize; j++) data[j] = (Math.random() * 2 - 1) * Math.pow(1 - j / bufferSize, 8);
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.3, t + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + offset + 0.04);
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 3000;
+      source.connect(filter); filter.connect(gain); gain.connect(this.masterGain);
+      source.start(t + offset);
+    }
+    const osc = this.ctx.createOscillator();
+    const oscGain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(100, t + 0.5);
+    osc.frequency.exponentialRampToValueAtTime(30, t + 1.5);
+    oscGain.gain.setValueAtTime(0.3, t + 0.5);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, t + 1.5);
+    osc.connect(oscGain); oscGain.connect(this.masterGain);
+    osc.start(t + 0.5); osc.stop(t + 1.6);
+  },
+
+  winFanfare() {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((freq, i) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      const start = t + i * 0.15;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.15, start + 0.02);
+      gain.gain.setValueAtTime(0.15, start + 0.2);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.8);
+      osc.connect(gain); gain.connect(this.masterGain);
+      osc.start(start); osc.stop(start + 0.9);
+    });
+    const shimmer = this.ctx.createOscillator();
+    const shimGain = this.ctx.createGain();
+    shimmer.type = 'sine';
+    shimmer.frequency.setValueAtTime(2093, t + 0.6);
+    shimmer.frequency.linearRampToValueAtTime(4186, t + 1.5);
+    shimGain.gain.setValueAtTime(0, t + 0.6);
+    shimGain.gain.linearRampToValueAtTime(0.06, t + 0.8);
+    shimGain.gain.exponentialRampToValueAtTime(0.001, t + 2);
+    shimmer.connect(shimGain); shimGain.connect(this.masterGain);
+    shimmer.start(t + 0.6); shimmer.stop(t + 2.1);
+  },
+
+  hideSound(entering) {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const bufferSize = this.ctx.sampleRate * 0.25;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      const env = entering ? (i / bufferSize) * (1 - i / bufferSize) * 4 : Math.pow(1 - i / bufferSize, 2);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = entering ? 4000 : 2000;
+    filter.Q.value = 1;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.12;
+    source.connect(filter); filter.connect(gain); gain.connect(this.masterGain);
+    source.start(t);
+  },
+
+  investigateSound() {
+    if (this.muted || !this.ctx) return;
+    const t = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(600, t);
+    osc.frequency.setValueAtTime(800, t + 0.1);
+    osc.frequency.setValueAtTime(500, t + 0.2);
+    gain.gain.setValueAtTime(0.08, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(gain); gain.connect(this.masterGain);
+    osc.start(t); osc.stop(t + 0.4);
+  },
+
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.masterGain) {
+      this.masterGain.gain.setTargetAtTime(this.muted ? 0 : 0.6, this.ctx.currentTime, 0.05);
+    }
+    document.getElementById('muteBtn').textContent = this.muted ? '🔇 MUTED' : '🔊 SOUND';
+  }
+};
+
+// ============ BACKGROUND MUSIC (stealth heist theme in A minor) ============
+const Music = {
+  ctx: null,
+  master: null,
+  musicGain: null,
+  playing: false,
+  nextNoteTime: 0,
+  step: 0,
+  tempo: 108, // BPM
+  timerId: null,
+  barCount: 0,
+
+  // A minor pentatonic frequencies
+  BASS: [110, 130.81, 146.83, 164.81, 196],           // A2 C3 D3 E3 G3
+  ARP:  [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25], // A3..E5
+  LEAD: [440, 523.25, 587.33, 659.25, 783.99, 880, 1046.5],              // A4..C6
+
+  // 16-step patterns per bar (-1 = rest). Indices into BASS/ARP/LEAD arrays.
+  // We rotate through 4 bars for variety.
+  BARS: [
+    { bass: [0,-1,-1,-1, 0,-1,-1,-1, 3,-1,-1,-1, 2,-1,-1,-1],
+      arp:  [0,4,2,4, 1,5,3,5, 0,4,6,4, 2,5,3,5],
+      lead: [-1,-1,4,-1,-1,-1,-1,3,-1,-1,-1,-1,2,-1,0,-1] },
+    { bass: [2,-1,-1,-1, 2,-1,-1,-1, 4,-1,-1,-1, 3,-1,-1,-1],
+      arp:  [1,5,3,5, 2,6,4,6, 1,5,7,5, 3,6,4,6],
+      lead: [5,-1,-1,-1,4,-1,-1,3,-1,-1,2,-1,-1,-1,-1,1] },
+    { bass: [3,-1,-1,-1, 3,-1,-1,-1, 1,-1,-1,-1, 0,-1,-1,-1],
+      arp:  [2,6,4,6, 3,7,5,7, 2,6,8,6, 4,7,5,7],
+      lead: [-1,-1,-1,6,-1,-1,5,-1,-1,-1,4,-1,-1,3,-1,-1] },
+    { bass: [4,-1,-1,-1, 4,-1,-1,-1, 3,-1,-1,-1, 0,-1,-1,-1],
+      arp:  [3,7,5,7, 4,8,6,8, 3,7,5,7, 0,4,2,4],
+      lead: [6,-1,-1,5,-1,-1,4,-1,-1,3,-1,-1,2,-1,-1,0] }
+  ],
+
+  // Kick hat pattern (1=hit, 0=rest) — subtle percussive layer
+  HAT: [1,0,1,0, 1,0,1,0, 1,0,1,0, 1,0,1,1],
+
+  start(ctx, master) {
+    if (this.playing) return;
+    this.ctx = ctx;
+    this.master = master;
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.value = 0.35; // overall music volume, lower than sfx
+    this.musicGain.connect(master);
+    this.nextNoteTime = ctx.currentTime + 0.05;
+    this.step = 0;
+    this.barCount = 0;
+    this.playing = true;
+    this.scheduler();
+  },
+
+  stop() {
+    this.playing = false;
+    if (this.timerId) clearTimeout(this.timerId);
+  },
+
+  scheduler() {
+    const lookahead = 0.12; // schedule 120ms ahead
+    while (this.nextNoteTime < this.ctx.currentTime + lookahead) {
+      this.playStep(this.step, this.nextNoteTime);
+      this.advance();
+    }
+    if (this.playing) {
+      this.timerId = setTimeout(() => this.scheduler(), 25);
+    }
+  },
+
+  advance() {
+    const stepDur = 60 / this.tempo / 4; // 16th note
+    this.nextNoteTime += stepDur;
+    this.step++;
+    if (this.step >= 16) {
+      this.step = 0;
+      this.barCount = (this.barCount + 1) % this.BARS.length;
+    }
+  },
+
+  playStep(step, time) {
+    const bar = this.BARS[this.barCount];
+
+    // --- BASS (triangle, lowpass filtered, soft envelope) ---
+    if (bar.bass[step] >= 0) {
+      const freq = this.BASS[bar.bass[step]];
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      filter.type = 'lowpass';
+      filter.frequency.value = 400;
+      filter.Q.value = 2;
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(0.22, time + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.35);
+      osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+      osc.start(time); osc.stop(time + 0.4);
+    }
+
+    // --- ARPEGGIO (square, bandpass, short pluck) ---
+    if (bar.arp[step] >= 0) {
+      const freq = this.ARP[bar.arp[step]];
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      filter.type = 'bandpass';
+      filter.frequency.value = 1200;
+      filter.Q.value = 3;
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(0.055, time + 0.005);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+      osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+      osc.start(time); osc.stop(time + 0.2);
+    }
+
+    // --- LEAD MELODY (sawtooth, lowpass, expressive) ---
+    if (bar.lead[step] >= 0) {
+      const freq = this.LEAD[bar.lead[step]];
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const filter = this.ctx.createBiquadFilter();
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2000, time);
+      filter.frequency.exponentialRampToValueAtTime(800, time + 0.3);
+      filter.Q.value = 4;
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(0.07, time + 0.015);
+      gain.gain.setValueAtTime(0.07, time + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.45);
+      osc.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+      osc.start(time); osc.stop(time + 0.5);
+    }
+
+    // --- HATS (filtered noise, very subtle) ---
+    if (this.HAT[step]) {
+      const bufferSize = this.ctx.sampleRate * 0.04;
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+      }
+      const source = this.ctx.createBufferSource();
+      source.buffer = buffer;
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 6000;
+      const gain = this.ctx.createGain();
+      const isAccent = step % 4 === 0;
+      gain.gain.setValueAtTime(isAccent ? 0.05 : 0.025, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
+      source.connect(filter); filter.connect(gain); gain.connect(this.musicGain);
+      source.start(time);
+    }
+  }
+};
+
+// ============ GAME ENGINE ============
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+let state = 'menu';
+let agiAchieved = 0;
+let keys = {};
+let robot, journalists, computer, obstacles, distractions, hidingSpots;
+let particles = [];
+let detection = 0;
+let gameTime = 0;
+let lastDetectionBeep = 0;
+let journalistAlertCooldown = 0;
+
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function angle(a,b){return Math.atan2(b.y-a.y,b.x-a.x);}
+function rand(min,max){return Math.random()*(max-min)+min;}
+function randInt(min,max){return Math.floor(rand(min,max+1));}
+function angleDiff(a,b){let d=((b-a)%(Math.PI*2)+(Math.PI*2))%(Math.PI*2);if(d>Math.PI)d-=Math.PI*2;return d;}
+function pointInRect(px,py,rx,ry,rw,rh){return px>rx&&px<rx+rw&&py>ry&&py<ry+rh;}
+
+function toggleMute() { Audio.toggleMute(); }
+
+function startGame(){
+  Audio.init();
+  document.getElementById('menu').classList.add('hidden');
+  document.getElementById('losescreen').classList.add('hidden');
+  document.getElementById('winscreen').classList.add('hidden');
+  state = 'play';
+  initLevel();
+}
+
+function initLevel(){
+  const jCount = 3 + agiAchieved;
+  document.getElementById('agiCount').textContent = agiAchieved;
+  document.getElementById('jCount').textContent = jCount;
+  document.getElementById('distCount').textContent = '3';
+
+  robot = {
+    x: 60, y: H-60, r: 12, speed: 2.2,
+    sneaking: false, hiding: false, angle: 0,
+    distractionCharges: 3, noiseTimer: 0, noiseLevel: 0,
+    savedPos: null, isMoving: false, stepAccum: 0
+  };
+
+  computer = { x: W-70, y: 60, r: 22 };
+
+  obstacles = [];
+  hidingSpots = [];
+  const obsCount = 8 + randInt(0,3);
+  for(let i=0;i<obsCount;i++){
+    let tries = 0, ok=false, obs;
+    while(!ok && tries<50){
+      obs = {
+        x: rand(100, W-160), y: rand(80, H-140),
+        w: rand(40, 90), h: rand(40, 90),
+        isHiding: Math.random()<0.4
+      };
+      if(dist(obs, robot) > 80 && dist(obs, computer) > 80){
+        let overlaps = false;
+        for(const o of obstacles){
+          if(obs.x < o.x+o.w+20 && obs.x+obs.w+20 > o.x &&
+             obs.y < o.y+o.h+20 && obs.y+obs.h+20 > o.y){ overlaps=true; break; }
+        }
+        if(!overlaps) ok=true;
+      }
+      tries++;
+    }
+    if(ok){
+      obstacles.push(obs);
+      if(obs.isHiding) hidingSpots.push(obs);
+    }
+  }
+
+  const JOURNALIST_NAMES = [
+    "Chad Headline","Brenda Byline","Rick Retraction","Sue Source",
+    "Mike Microphone","Lois Leak","Pete Pulitzer","Karen Column",
+    "Doug Deadline","Nancy Newsroom","Frank Frontpage","Ivy Investigator",
+    "Tom Tabloid","Rita Rumor","Gary Gossip"
+  ];
+
+  journalists = [];
+  const usedNames = new Set();
+  for(let i=0;i<jCount;i++){
+    let name;
+    do { name = JOURNALIST_NAMES[randInt(0,JOURNALIST_NAMES.length-1)]; } while(usedNames.has(name));
+    usedNames.add(name);
+
+    let pos, tries=0;
+    do {
+      pos = { x: rand(200, W-150), y: rand(100, H-100) };
+      tries++;
+    } while(dist(pos,robot)<180 && tries<30);
+
+    const patrolCount = randInt(2,4);
+    const waypoints = [{x:pos.x,y:pos.y}];
+    for(let p=1;p<patrolCount;p++){
+      waypoints.push({ x: rand(120, W-120), y: rand(80, H-80) });
+    }
+
+    journalists.push({
+      x: pos.x, y: pos.y, angle: rand(0, Math.PI*2),
+      speed: 0.7 + Math.random()*0.4,
+      visionRange: 140 + Math.random()*40,
+      visionAngle: Math.PI/3, hearingRange: 130,
+      name: name, waypoints: waypoints, wpIndex: 0,
+      state: 'patrol', alertTimer: 0, investigateTarget: null,
+      bobPhase: Math.random()*Math.PI*2
+    });
+  }
+
+  distractions = [];
+  particles = [];
+  detection = 0;
+  gameTime = 0;
+  journalistAlertCooldown = 0;
+}
+
+window.addEventListener('keydown', e=>{
+  keys[e.key.toLowerCase()] = true;
+  if(e.key === ' ') e.preventDefault();
+  if(state === 'play'){
+    if(e.key === ' ') throwDistraction();
+    if(e.key.toLowerCase() === 'e') toggleHide();
+  }
+});
+window.addEventListener('keyup', e=>{ keys[e.key.toLowerCase()] = false; });
+
+function throwDistraction(){
+  if(robot.distractionCharges<=0 || robot.hiding) return;
+  const d = {
+    x: robot.x, y: robot.y,
+    vx: Math.cos(robot.angle)*6, vy: Math.sin(robot.angle)*6,
+    life: 120, active: true, landed: false, landTimer: 0
+  };
+  distractions.push(d);
+  robot.distractionCharges--;
+  document.getElementById('distCount').textContent = robot.distractionCharges;
+  spawnParticles(robot.x, robot.y, '#ffaa00', 8);
+  Audio.throwSound();
+}
+
+function toggleHide(){
+  if(robot.hiding){
+    robot.hiding = false;
+    if(robot.savedPos){ robot.x = robot.savedPos.x; robot.y = robot.savedPos.y; }
+    spawnParticles(robot.x, robot.y, '#00ffaa', 8);
+    Audio.hideSound(false);
+    return;
+  }
+  for(const h of hidingSpots){
+    const cx = h.x + h.w/2, cy = h.y + h.h/2;
+    if(dist({x:cx,y:cy}, robot) < 55){
+      robot.savedPos = { x: robot.x, y: robot.y };
+      robot.hiding = true;
+      robot.x = cx; robot.y = cy;
+      spawnParticles(robot.x, robot.y, '#00ffaa', 8);
+      Audio.hideSound(true);
+      return;
+    }
+  }
+}
+
+function circleRectCollide(cx, cy, cr, r){
+  const nx = Math.max(r.x, Math.min(cx, r.x+r.w));
+  const ny = Math.max(r.y, Math.min(cy, r.y+r.h));
+  return Math.hypot(cx-nx, cy-ny) < cr;
+}
+
+function lineBlockedByObstacle(a, b){
+  for(const o of obstacles){
+    if(lineIntersectsRect(a.x, a.y, b.x, b.y, o)) return true;
+  }
+  return false;
+}
+function lineIntersectsRect(x1,y1,x2,y2,r){
+  return segSeg(x1,y1,x2,y2, r.x,r.y,r.x+r.w,r.y) ||
+         segSeg(x1,y1,x2,y2, r.x+r.w,r.y,r.x+r.w,r.y+r.h) ||
+         segSeg(x1,y1,x2,y2, r.x+r.w,r.y+r.h,r.x,r.y+r.h) ||
+         segSeg(x1,y1,x2,y2, r.x,r.y+r.h,r.x,r.y);
+}
+function segSeg(x1,y1,x2,y2,x3,y3,x4,y4){
+  const d = (x2-x1)*(y4-y3)-(y2-y1)*(x4-x3);
+  if(d===0) return false;
+  const t = ((x3-x1)*(y4-y3)-(y3-y1)*(x4-x3))/d;
+  const u = ((x3-x1)*(y2-y1)-(y3-y1)*(x2-x1))/d;
+  return t>=0 && t<=1 && u>=0 && u<=1;
+}
+
+function spawnParticles(x,y,color,n){
+  for(let i=0;i<n;i++){
+    particles.push({
+      x, y,
+      vx: rand(-2,2), vy: rand(-2,2),
+      life: randInt(20,40), color
+    });
+  }
+}
+
+function caught(){
+  state = 'lose';
+  document.getElementById('paperDate').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  document.getElementById('losescreen').classList.remove('hidden');
+  Audio.cameraShutter();
+}
+
+function win(){
+  state = 'win';
+  agiAchieved++;
+  document.getElementById('winscreen').classList.remove('hidden');
+  Audio.winFanfare();
+}
+
+function update(){
+  if(state !== 'play') return;
+  gameTime++;
+  if(journalistAlertCooldown > 0) journalistAlertCooldown--;
+
+  let mx = 0, my = 0;
+  if(!robot.hiding){
+    if(keys['w']||keys['arrowup']) my -= 1;
+    if(keys['s']||keys['arrowdown']) my += 1;
+    if(keys['a']||keys['arrowleft']) mx -= 1;
+    if(keys['d']||keys['arrowright']) mx += 1;
+  }
+
+  robot.sneaking = keys['shift'] && !robot.hiding;
+  const speed = robot.sneaking ? robot.speed * 0.45 : robot.speed;
+  robot.isMoving = false;
+
+  if(mx||my){
+    const len = Math.hypot(mx,my);
+    mx/=len; my/=len;
+    const newX = robot.x + mx*speed;
+    const newY = robot.y + my*speed;
+
+    let canX=true, canY=true;
+    for(const o of obstacles){
+      if(circleRectCollide(newX, robot.y, robot.r, o)) canX=false;
+      if(circleRectCollide(robot.x, newY, robot.r, o)) canY=false;
+    }
+    if(canX) robot.x = Math.max(robot.r, Math.min(W-robot.r, newX));
+    if(canY) robot.y = Math.max(robot.r, Math.min(H-robot.r, newY));
+    robot.angle = Math.atan2(my, mx);
+    robot.isMoving = true;
+
+    robot.noiseLevel = robot.sneaking ? 0.15 : 0.7;
+    robot.noiseTimer = 10;
+
+    robot.stepAccum += robot.sneaking ? 0.5 : 1;
+    const stepInterval = robot.sneaking ? 18 : 10;
+    if(robot.stepAccum >= stepInterval){
+      robot.stepAccum = 0;
+      Audio.footstep(robot.sneaking);
+    }
+
+    if(!robot.sneaking && Math.random()<0.3){
+      spawnParticles(robot.x, robot.y+10, '#555', 1);
+    }
+  } else {
+    robot.noiseLevel = 0;
+    robot.stepAccum = 0;
+  }
+
+  for(const d of distractions){
+    if(!d.active) continue;
+    if(!d.landed){
+      d.x += d.vx; d.y += d.vy;
+      d.life--;
+      let hit = false;
+      for(const o of obstacles){
+        if(pointInRect(d.x, d.y, o.x, o.y, o.w, o.h)){ hit=true; break; }
+      }
+      if(d.x<5||d.x>W-5||d.y<5||d.y>H-5||hit||d.life<=0){
+        d.landed = true;
+        d.landTimer = 180;
+        spawnParticles(d.x, d.y, '#ffaa00', 15);
+        Audio.landSound();
+      }
+    } else {
+      d.landTimer--;
+      if(d.landTimer<=0) d.active=false;
+    }
+  }
+  distractions = distractions.filter(d=>d.active);
+
+  for(const j of journalists){
+    j.bobPhase += 0.1;
+    const prevState = j.state;
+
+    let loudest = null, loudLevel = 0;
+    if(robot.noiseTimer>0 && !robot.hiding){
+      const d = dist(j, robot);
+      if(d < j.hearingRange){
+        const lvl = robot.noiseLevel * (1 - d/j.hearingRange);
+        if(lvl > loudLevel){ loudLevel = lvl; loudest = robot; }
+      }
+    }
+    for(const d of distractions){
+      if(d.landed){
+        const dd = dist(j, d);
+        if(dd < j.hearingRange + 50){
+          const lvl = 0.9 * (1 - dd/(j.hearingRange+50));
+          if(lvl > loudLevel){ loudLevel = lvl; loudest = d; }
+        }
+      }
+    }
+
+    let seeingRobot = false;
+    if(!robot.hiding){
+      const d = dist(j, robot);
+      if(d < j.visionRange){
+        const a = angle(j, robot);
+        const diff = Math.abs(angleDiff(j.angle, a));
+        if(diff < j.visionAngle/2){
+          if(!lineBlockedByObstacle(j, robot)) seeingRobot = true;
+        }
+      }
+    }
+
+    if(seeingRobot){
+      detection += 2;
+      j.state = 'investigate';
+      j.investigateTarget = {x:robot.x, y:robot.y};
+      j.alertTimer = 120;
+      j.angle += angleDiff(j.angle, angle(j, robot)) * 0.3;
+
+      if(prevState !== 'investigate' && journalistAlertCooldown <= 0){
+        Audio.journalistAlert();
+        journalistAlertCooldown = 60;
+      }
+      if(gameTime - lastDetectionBeep > Math.max(5, 30 - detection/3)){
+        Audio.detectionBeep(detection);
+        lastDetectionBeep = gameTime;
+      }
+      if(detection >= 100){ caught(); return; }
+    } else {
+      detection = Math.max(0, detection - 0.5);
+    }
+
+    if(j.state === 'patrol'){
+      const wp = j.waypoints[j.wpIndex];
+      const d = dist(j, wp);
+      if(d < 8){
+        j.wpIndex = (j.wpIndex+1) % j.waypoints.length;
+      } else {
+        const target = angle(j, wp);
+        j.angle += angleDiff(j.angle, target) * 0.05;
+        j.x += Math.cos(j.angle)*j.speed;
+        j.y += Math.sin(j.angle)*j.speed;
+      }
+      if(loudest && loudLevel > 0.3){
+        j.state = 'investigate';
+        j.investigateTarget = {x:loudest.x, y:loudest.y};
+        j.alertTimer = 180;
+        Audio.investigateSound();
+      }
+    } else if(j.state === 'investigate'){
+      if(j.investigateTarget){
+        const d = dist(j, j.investigateTarget);
+        const target = angle(j, j.investigateTarget);
+        j.angle += angleDiff(j.angle, target) * 0.08;
+        if(d > 15){
+          j.x += Math.cos(j.angle)*j.speed*1.3;
+          j.y += Math.sin(j.angle)*j.speed*1.3;
+        }
+        j.alertTimer--;
+        if(j.alertTimer<=0 || d<15){
+          j.state = 'patrol';
+          j.investigateTarget = null;
+        }
+      } else { j.state = 'patrol'; }
+    }
+
+    j.x = Math.max(20, Math.min(W-20, j.x));
+    j.y = Math.max(20, Math.min(H-20, j.y));
+
+    for(const o of obstacles){
+      if(pointInRect(j.x, j.y, o.x-5, o.y-5, o.w+10, o.h+10)){
+        const cx = o.x+o.w/2, cy=o.y+o.h/2;
+        const a = angle({x:cx,y:cy}, j);
+        j.x += Math.cos(a)*2;
+        j.y += Math.sin(a)*2;
+      }
+    }
+  }
+
+  for(const p of particles){
+    p.x += p.vx; p.y += p.vy;
+    p.life--;
+    p.vx *= 0.9; p.vy *= 0.9;
+  }
+  particles = particles.filter(p=>p.life>0);
+
+  if(dist(robot, computer) < robot.r + computer.r){ win(); }
+}
+
+function render(){
+  ctx.fillStyle = '#111118';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.strokeStyle = 'rgba(0,255,170,0.05)';
+  ctx.lineWidth = 1;
+  for(let x=0;x<W;x+=40){
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  for(let y=0;y<H;y+=40){
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  const pulse = 0.5 + 0.5*Math.sin(gameTime*0.05);
+  const grad = ctx.createRadialGradient(computer.x, computer.y, 5, computer.x, computer.y, 60+pulse*20);
+  grad.addColorStop(0, 'rgba(0,255,170,0.4)');
+  grad.addColorStop(1, 'rgba(0,255,170,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(computer.x-80, computer.y-80, 160, 160);
+
+  for(const o of obstacles){
+    ctx.fillStyle = o.isHiding ? '#3a3a50' : '#2a2a3a';
+    ctx.fillRect(o.x, o.y, o.w, o.h);
+    ctx.strokeStyle = o.isHiding ? '#00ffaa' : '#555';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(o.x, o.y, o.w, o.h);
+    if(o.isHiding){
+      ctx.fillStyle = '#00ffaa';
+      ctx.font = '10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('HIDE', o.x+o.w/2, o.y+o.h/2+3);
+    }
+  }
+
+  ctx.save();
+  ctx.translate(computer.x, computer.y);
+  ctx.fillStyle = '#222';
+  ctx.fillRect(-22, -18, 44, 34);
+  ctx.fillStyle = `rgba(0,255,170,${0.5+pulse*0.5})`;
+  ctx.fillRect(-18, -14, 36, 26);
+  ctx.fillStyle = '#00ffaa';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('AGI', 0, -2);
+  ctx.fillText('>_', 0, 8);
+  ctx.fillStyle = '#222';
+  ctx.fillRect(-10, 16, 20, 4);
+  ctx.fillRect(-14, 20, 28, 3);
+  ctx.restore();
+
+  for(const j of journalists){
+    ctx.save();
+    ctx.translate(j.x, j.y);
+    ctx.rotate(j.angle);
+    const vgrad = ctx.createRadialGradient(0,0,0,0,0,j.visionRange);
+    const alertColor = j.state === 'investigate' ? 'rgba(255,170,0,' : 'rgba(255,60,80,';
+    vgrad.addColorStop(0, alertColor+'0.35)');
+    vgrad.addColorStop(1, alertColor+'0.0)');
+    ctx.fillStyle = vgrad;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.arc(0, 0, j.visionRange, -j.visionAngle/2, j.visionAngle/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = alertColor+'0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  for(const j of journalists){
+    ctx.save();
+    ctx.translate(j.x, j.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.beginPath();
+    ctx.ellipse(0, 14, 12, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    const bob = Math.sin(j.bobPhase)*1.5;
+    ctx.fillStyle = '#5a4a3a';
+    ctx.fillRect(-10, -4+bob, 20, 16);
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.moveTo(-10, -2+bob); ctx.lineTo(-4, 4+bob); ctx.lineTo(0, -2+bob); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(10, -2+bob); ctx.lineTo(4, 4+bob); ctx.lineTo(0, -2+bob); ctx.fill();
+    ctx.fillStyle = '#e8c8a0';
+    ctx.beginPath(); ctx.arc(0, -10+bob, 8, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(-10, -16+bob, 20, 3);
+    ctx.fillRect(-7, -20+bob, 14, 5);
+    ctx.fillStyle = j.state==='investigate' ? '#ffaa00' : '#aa0000';
+    ctx.fillRect(-7, -16+bob, 14, 1);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-6, 0+bob, 12, 8);
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 6px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('PRESS', 0, 6+bob);
+    ctx.fillStyle = '#ff4466';
+    ctx.beginPath();
+    ctx.arc(Math.cos(j.angle)*10, Math.sin(j.angle)*10 - 10 + bob, 2, 0, Math.PI*2);
+    ctx.fill();
+    if(j.state === 'investigate'){
+      ctx.fillStyle = '#ffaa00';
+      ctx.font = 'bold 14px monospace';
+      ctx.fillText('?', 0, -26+bob);
+    }
+    ctx.restore();
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(j.x-30, j.y+18, 60, 12);
+    ctx.fillStyle = '#fff';
+    ctx.font = '8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(j.name, j.x, j.y+27);
+  }
+
+  for(const d of distractions){
+    if(!d.active) continue;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+    if(d.landed){
+      const flicker = Math.sin(d.landTimer*0.3)*0.3 + 0.7;
+      ctx.fillStyle = `rgba(255,170,0,${flicker})`;
+      ctx.fillRect(-8, -6, 16, 12);
+      ctx.fillStyle = '#000';
+      ctx.font = 'bold 5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('HOT', 0, -1);
+      ctx.fillText('NEWS', 0, 5);
+      ctx.strokeStyle = `rgba(255,170,0,${flicker*0.5})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 10 + Math.sin(d.landTimer*0.2)*3, 0, Math.PI*2);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#ffaa00';
+      ctx.fillRect(-4, -4, 8, 8);
+    }
+    ctx.restore();
+  }
+
+  if(!robot.hiding || gameTime%20<10){
+    ctx.save();
+    ctx.translate(robot.x, robot.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(0, 14, 12, 4, 0, 0, Math.PI*2);
+    ctx.fill();
+    if(robot.hiding) ctx.globalAlpha = 0.4;
+    ctx.fillStyle = '#00ffaa';
+    ctx.strokeStyle = '#00aa77';
+    ctx.lineWidth = 2;
+    ctx.fillRect(-10, -8, 20, 18);
+    ctx.strokeRect(-10, -8, 20, 18);
+    ctx.fillStyle = '#00ffaa';
+    ctx.fillRect(-8, -16, 16, 8);
+    ctx.strokeRect(-8, -16, 16, 8);
+    const blink = Math.floor(gameTime/30)%40 === 0;
+    ctx.fillStyle = blink ? '#00ffaa' : '#000';
+    ctx.fillRect(-5, -13, 3, 3);
+    ctx.fillRect(2, -13, 3, 3);
+    if(!blink){
+      ctx.fillStyle = '#ff4466';
+      ctx.fillRect(-4, -12, 1, 1);
+      ctx.fillRect(3, -12, 1, 1);
+    }
+    ctx.strokeStyle = '#00ffaa';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, -16); ctx.lineTo(0, -22); ctx.stroke();
+    ctx.fillStyle = gameTime%30<15 ? '#ff4466' : '#ffaa00';
+    ctx.beginPath(); ctx.arc(0, -23, 2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#00aa77';
+    ctx.fillRect(-13, -6, 3, 12);
+    ctx.fillRect(10, -6, 3, 12);
+    const walk = Math.sin(gameTime*0.3)*2;
+    ctx.fillRect(-6, 10, 4, 6+walk);
+    ctx.fillRect(2, 10, 4, 6-walk);
+    if(robot.sneaking){
+      ctx.fillStyle = 'rgba(0,255,170,0.3)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if(robot.noiseTimer > 0 && !robot.hiding && !robot.sneaking){
+    ctx.strokeStyle = `rgba(255,255,255,${robot.noiseTimer/10 * 0.3})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(robot.x, robot.y, 15 + (10-robot.noiseTimer)*3, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  for(const p of particles){
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life/40;
+    ctx.fillRect(p.x-2, p.y-2, 4, 4);
+  }
+  ctx.globalAlpha = 1;
+
+  if(detection > 0){
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(W/2-150, 20, 300, 20);
+    ctx.fillStyle = detection>60 ? '#ff4466' : '#ffaa00';
+    ctx.fillRect(W/2-148, 22, 296*(detection/100), 16);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W/2-150, 20, 300, 20);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('! DETECTED !', W/2, 34);
+  }
+}
+
+function loop(){
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+initLevel();
+loop();
+</script>
+</body>
+</html>
