@@ -1,0 +1,36 @@
+## The construction
+
+The key fact: for a degree-$n$ polynomial $p$, the irreducible components of $X=\{p(x)=p(y)\}$ correspond to the **orbitals** (orbits on ordered pairs of sheets) of the monodromy group $G\le S_n$ of $p$. The diagonal orbital gives the line $x=y$; the number of components equals the rank of $G$.
+
+Since $19$ is prime, a transitive $G\le S_{19}$ is either 2-transitive (rank $2$ — only the diagonal and one big component, too few) or sits inside the affine group $\mathrm{AGL}(1,19)$. For polynomial monodromy the only affine cases are:
+
+- **cyclic** $C_{19}$ — realized by $x^{19}$, where $x^{19}-y^{19}=\prod_{\zeta^{19}=1}(x-\zeta y)$ splits into **19 lines**. This is exactly the "all linear" case to avoid.
+- **dihedral** $D_{19}$ — realized by the Chebyshev/Dickson polynomial. The point stabilizer (a reflection) has orbits $\{0\},\{1,18\},\dots,\{9,10\}$, so the rank is $1+\tfrac{19-1}{2}=10$.
+
+So the dihedral choice gives **10 components**, with the right mix of linear/non-linear.
+
+## Pinning down the polynomial
+
+Take the monic Chebyshev polynomial $D_{19}(x,1)=2\,T_{19}(x/2)$ (the Dickson polynomial, $D_n(s+s^{-1})=s^n+s^{-n}$). It is automatically monic and odd (degree $19$ odd), with integer coefficients. Its general form is $D_{19}(x,a)$, whose linear coefficient works out to $-19\,a^{9}$; requiring linear coefficient $-19$ with real coefficients forces $a^9=1$, i.e. $a=1$. The normalizations (monic, odd, real, linear coeff $-19$) make the polynomial unique:
+
+$$p(x)=x^{19}-19x^{17}+152x^{15}-665x^{13}+1729x^{11}-2717x^{9}+2508x^{7}-1254x^{5}+285x^{3}-19x.$$
+
+**Components.** The Dickson identity gives the explicit factorization
+
+$$p(x)-p(y)=(x-y)\prod_{j=1}^{9}\Bigl(x^{2}-2xy\cos\tfrac{2\pi j}{19}+y^{2}-4\sin^{2}\tfrac{2\pi j}{19}\Bigr).$$
+
+Each quadratic factor is an irreducible conic (its $3\times3$ matrix has determinant $-\sin^4\theta_j\neq0$), so over $\mathbb{C}$ the curve $X$ has **10 irreducible components**: the diagonal line $x=y$ plus **9 non-linear $(2,2)$ conics**. That satisfies "at least 3, not all linear."
+
+## Computing $p(19)$
+
+Use the recurrence $a_n=19a_{n-1}-a_{n-2}$, $a_0=2,\ a_1=19$ (here $a_n=D_n(19,1)$):
+
+$$359,\;6802,\;128879,\;2441899,\;\dots,\;a_{18}=99{,}042{,}070{,}146{,}811{,}639{,}444{,}802,$$
+
+$$a_{19}=19\,a_{18}-a_{17}.$$
+
+This gives
+
+$$\boxed{p(19)=1{,}876{,}572{,}071{,}974{,}094{,}803{,}391{,}179}$$
+
+(equivalently $y^{19}+y^{-19}$ for $y=\tfrac{19+\sqrt{357}}{2}$, $\approx 1.877\times10^{24}$).
