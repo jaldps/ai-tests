@@ -1,0 +1,210 @@
+Build prompt: TYPE OR DIE
+
+Paste everything below into a fresh conversation as a single request.
+
+Build a single-file browser game called TYPE OR DIE — a first-person typing survival horror game. Deliver one self-contained .html file (Three.js r128 via cdnjs, procedural Web Audio, vanilla JS in an IIFE, no build step, no external image/sound/font assets besides Google Fonts Creepster + Special Elite). The player kills approaching creatures by typing the word floating above each one's head; every correct letter fires a shot, and finishing the word kills it.
+
+Before writing any code, plan the full architecture below — camera/aim math, entity system, environment system — since these are load-bearing and hard to retrofit.
+
+Core fantasy
+
+Graveyard-horror typing shooter. The player stands in one spot (no WASD movement) while creatures close in from every direction, including from behind. Survival depends on typing speed, accuracy, and target prioritization, not movement.
+
+Camera & auto-aim (the single most important system)
+
+Enemies spawn at a full 360° random angle around the player, at a fixed eye height of 1.6. Because the player can't turn manually in a satisfying way while typing, the camera must automatically aim itself at whatever the player is currently typing. This is not optional polish — it's the mechanic that makes 360° spawning fair and readable. Get this exactly right:
+
+Track a smoothed camYaw/camPitch. Each frame, compute a desired yaw/pitch:
+
+If there's an active (locked) target: get its head's world position (tx, ty, tz). With the player fixed at the origin:
+
+desiredYaw = atan2(-tx, -tz) — this is the correct sign convention for a camera whose default forward is -Z in Three.js. Verify this empirically (screenshot a target off to one side, confirm it centers under the crosshair) rather than trusting derivation alone.
+
+planarDist = hypot(tx, tz); desiredPitch = clamp(atan2(ty - 1.6, planarDist), -0.5, 0.5).
+
+If nothing is locked: idle behavior — a slow sine-wave scan (±0.25 rad) plus a small mouse-parallax offset, so the view feels alive without being disorienting.
+
+Interpolate toward the desired angle every frame with a frame-rate-independent lerp: angle += (desired - angle) * min(delta * lerpSpeed, 1), using a fast lerpSpeed (~7) while locked and a slow one (~2.5) while idle.
+
+Improvement over a naive implementation: because targets can be almost directly behind the player, a plain linear lerp on raw yaw values can occasionally take the long way around near the ±π boundary. Use a wraparound-safe angle interpolation:
+
+function angleLerp(current, target, t) {
+  let diff = ((target - current + Math.PI) % (Math.PI*2) + Math.PI*2) % (Math.PI*2) - Math.PI;
+  return current + diff * t;
+}
+
+Layer on top: idle head-bob, mouse parallax (small, secondary — auto-aim dominates while locked), and screen shake on hits/damage (decaying magnitude over ~0.4s).
+
+Attach a spotlight "flashlight" to the camera so whatever you're aiming at is lit.
+
+Test this explicitly: type a letter that locks a creature spawned well off to the side or behind the player, wait for the lerp to settle, and confirm via screenshot that it's centered under the crosshair.
+
+Targeting & typing logic
+
+Each enemy/pickup has a word (or a queue of words/phrases for multi-stage kills — see Bosses) and a typedIndex.
+
+On keydown: if there's a valid active target, check the next expected character; correct → advance typedIndex, wrong → miss (break combo). If there's no active target, search all alive enemies + pickups whose word starts with the typed letter, pick the nearest, lock it, and count that keystroke as its first correct letter.
+
+Word completion kills the enemy (or advances to the next phase for multi-word entities).
+
+Track combo count (breaks on miss), a combo-based score multiplier, WPM, and accuracy, all shown live in the HUD.
+
+There must be a way to prevent random-guessing if enemies span outside of the user's field of view.
+
+The aiming must be pointed to the enemy being attacked, for immersion.
+
+Threat radar
+
+A small circular canvas HUD element (not part of the 3D scene) in a bottom corner:
+
+World-fixed dot plot of every alive enemy (color-coded per type) and pickup (white-ringed), positioned by actual world (x, z) relative to the player, clamped to the radar's radius so distant threats show at the edge.
+
+A rotating triangle at the center showing the camera's current facing direction (use the negative of camera yaw when rotating the canvas, and verify the triangle actually points at a dot you're locked onto).
+
+This is what makes 360° spawning fair: the player always has pre-aim situational awareness even before locking on.
+
+Creature roster — build genuinely distinct meshes, not palette swaps
+
+At minimum 7 regular types plus a boss, each with its own geometry builder function and its own movement/animation style (don't reuse one humanoid rig scaled up for everything):
+
+Type
+
+Silhouette
+
+Movement
+
+Notes
+
+zombie
+
+basic humanoid
+
+shambling walk cycle
+
+baseline
+
+skeleton
+
+leaner humanoid
+
+faster walk
+
+early unlock
+
+ghoul
+
+hunched, bulkier
+
+aggressive fast approach
+
+mid unlock
+
+crawler
+
+low, wide, 6 legs
+
+tripod gait, low to ground, erratic
+
+spider-like
+
+wraith
+
+legless, cone "robe" + head
+
+hovers, sine-wave bob, no ground contact, translucent material
+
+floaty, eerie
+
+flyer
+
+small body + two wing planes
+
+flaps, flies at head height with vertical bob
+
+fast, low damage, high frequency
+
+brute
+
+oversized humanoid, shoulder spikes
+
+slow, tanky, requires a 2-word kill sequence
+
+mini-boss, rare spawn
+
+boss (×3–4 named)
+
+oversized humanoid + horns
+
+mostly stationary once in range, periodic ranged attack
+
+3-phrase kill sequence, named health bar
+
+Give each type its own signature color (used consistently for its eyes, hit particles, tracers, ground decal, and radar dot — this cohesion reads as intentional design, not chaos). Gate unlocks by wave number so the roster grows as the player progresses. Weight spawn probability so early waves stay simple.
+
+Improvement: give each named boss a genuinely distinct silhouette (extra horns, wings, or a floating variant) rather than only recoloring the same mesh — reuse the shared humanoid builder but pass per-boss accessory flags.
+
+Bosses
+
+Every 5th wave, spawn one boss with a 3-phrase kill sequence (each phrase includes spaces). Track queueIndex generically (the same multi-word system used for the brute's 2-word sequence) so there's one code path for "entities with more than one word to kill." Show a name + health bar HUD element (health = 100 - queueIndex*phaseSize - (typedIndex/word.length)*phaseSize), tinted to that boss's accent color. Boss stops approaching at a stand-off distance and periodically deals ranged damage instead.
+
+Environments that shift between waves
+
+Define 5 environment themes (e.g. graveyard, hollow forest, sunken crypt, burning village, rotting swamp), each specifying: fog color/density, ambient/moonlight/torch colors and intensities, a procedurally generated ground texture (canvas noise, two-tone), a procedurally generated sky gradient (canvas texture on a large inverted sphere), and a decoration type (tombstones / dead trees / broken pillars / charred ruins / reeds) built from primitives and scattered in a full circle around the player.
+
+Advance to the next theme every wave, with a ~1s fade-to-black transition swapping the scene at the midpoint. Show the theme name as a subtitle under the wave banner. This is what keeps repeated waves from feeling monotonous — the place changes, not just the numbers.
+
+Dispose old textures/materials when swapping themes (use a recursive object.traverse() disposal helper) so a long session doesn't leak GPU memory across dozens of theme swaps.
+
+Visual polish checklist
+
+Procedural starfield (sprites on a large sphere, gentle opacity twinkle).
+
+Ground blood/slime decals at kill locations: a flat, irregular splat texture (procedural canvas, several overlapping radial gradients), tinted per-creature-color, capped at ~25–30 concurrent (oldest removed), fading over several seconds.
+
+Particle bursts on hit (small) and kill (larger, boss/brute bigger still), additive-blended glow sprites with gravity.
+
+Line tracers from camera to target on every correct keystroke.
+
+A signature first-person prop: a low-poly antique typewriter attached to the camera, tucked into a bottom corner, with a key that visibly bounces on every correct keystroke and a small "carriage kick" on word completion. Placement warning learned the hard way: small objects placed too close to the camera in a shared-FOV perspective view appear enormous — a ~0.5-unit-wide object 0.7 units from the camera can fill the entire screen. Scale the whole prop down (~0.4–0.5x) and/or push it further out (~0.85–1.0 units), position it off-center toward a corner, and screenshot-verify it doesn't obscure the crosshair or center of the screen before moving on.
+
+Screen vignette, hit-flash, lightning flashes (periodic + on boss-phase transitions), low-health heartbeat pulse (interval shortens as health drops).
+
+Power-ups
+
+Rare glowing pickups (glowing icosahedron + slowly rotating ring), max one on screen at a time, spawning every ~25–45s, despawning if not collected within ~8s. Typed exactly like an enemy (share the same word/typedIndex/label-sprite shape so targeting code doesn't need a special case). At least: heal, nuke (kill all non-boss enemies on screen), freeze (slow all enemies to a crawl for ~5s), rapid (double score multiplier for ~10s). Show active buff timers as small HUD badges, plus a faint full-screen color tint while each is active.
+
+HUD
+
+Health bar + wave/kills/score/combo (top-left), WPM/accuracy (top-right), wave banner with theme subtitle (center, on wave change), boss name + health bar (top-center, boss fights only), target word with typed/untyped styling and a lock-color border matching the current target's signature color (bottom-center), a plain crosshair that recolors when locked, the radar (bottom corner), and transient floating popups for score gains, "PERFECT" (zero-miss kill bonus), and combo milestones (e.g. every 10th kill).
+
+Audio
+
+Fully procedural Web Audio (oscillators + filtered noise buffers) — no audio files. Cover: shoot/clack, hit, kill, miss, hurt, heartbeat, wave-start, word-complete "ding," pickup chime, nuke boom, boss roar/phase-change/attack, background effects/music, ambient low drone + filtered noise bed, and periodic thunder.
+
+Difficulty curve
+
+Scale spawn rate, max concurrent enemies, enemy speed, word length, and the chance of generating gibberish "words" (vs. real dictionary words) with wave number, with sane caps so late waves stay hard but not impossible. Increase the boss/brute pool and kills-required-per-wave gradually.
+
+Suggested improvements beyond a first pass
+
+Consider a light meta-progression: every N waves survived unlocks a small permanent perk choice (e.g. wider auto-aim assist window, faster combo decay forgiveness) to add a session-to-session goal.
+
+Track and display max combo and per-run creature-kill breakdown on the game-over screen, not just totals.
+
+Keep the radar's per-type color coding but consider distinguishing dot shape too (circle vs. triangle vs. square) for colorblind accessibility, in addition to color.
+
+QA process (do this before considering it done)
+
+Extract the <script> contents and run node --check on it after every meaningful edit.
+
+Grep for duplicate HTML ids and verify tag balance (div/script/style/button open vs. close counts).
+
+Run headless Puppeteer smoke tests (Chromium with --no-sandbox --use-gl=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist, since sandboxed environments often lack a real GPU) capturing pageerror and console events, with generous settle time (software rendering is slow — wait 1.5–3s after state changes before screenshotting).
+
+Specifically verify, with real keyboard-driven interaction (not just direct state injection, which can bypass the render loop's natural timing): the start screen, that typing a letter locks the nearest matching target and the camera visibly turns to face it, that a full wave-kill cycle advances to the next wave/environment without errors, that a boss fight's multi-phrase sequence and health bar work, that a pickup can be collected, and that the game-over screen renders correctly on death.
+
+For isolated visual checks of individual creature types/themes/bosses, it's reasonable to temporarily expose key internals (applyEnvironment, spawnBoss, spawnPickup, createEnemyInstance, scene, STATE) on a throwaway debug copy of the file — never ship that hook in the final file.
+
+Deliverable
+
+One .html file, saved to the outputs directory and presented to the user. No separate CSS/JS files, no external assets beyond the two Google Fonts and the Three.js CDN script tag.
