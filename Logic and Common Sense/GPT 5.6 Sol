@@ -1,0 +1,9 @@
+The fastest time is **17 minutes**:
+
+1. A and B cross: **2 minutes**
+2. A returns with the torch: **1 minute**
+3. C and D cross: **10 minutes**
+4. B returns with the torch: **2 minutes**
+5. A and B cross again: **2 minutes**
+
+**Total: 2 + 1 + 10 + 2 + 2 = 17 minutes.**
