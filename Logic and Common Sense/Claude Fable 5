@@ -1,0 +1,22 @@
+REASONING
+Recognized classic puzzle and optimized crossing strategy efficiently
+Recognized classic puzzle and optimized crossing strategy efficiently
+I'm recognizing this as the classic bridge and torch puzzle where four people with crossing times of 1, 2, 5, and 10 minutes need to get across, with the constraint that only two can cross at once, they move at the slower person's pace, and someone must carry the torch back.
+
+The key insight is that instead of having the fastest person shuttle everyone across individually, it's more efficient to send the two slowest people together. Working through the optimal strategy: the two fastest cross first (2 minutes), the fastest returns (1 minute), the two slowest cross together (10 minutes), the second-fastest returns (2 minutes), and finally the two fastest cross again (2 minutes), totaling 17 minutes. I'll use a numbered list for the crossing steps since it makes the sequence clear and easy to follow.
+
+Done
+
+
+
+ANSWER
+17 minutes — assuming the classic constraint that the bridge holds only two people at a time, and a pair moves at the slower person's pace.
+
+The trick is to make the two slowest people cross together, so D's 10 minutes absorbs C's 5:
+
+A and B cross → 2 min (total: 2)
+A returns with the torch → 1 min (total: 3)
+C and D cross → 10 min (total: 13)
+B returns with the torch → 2 min (total: 15)
+A and B cross again → 2 min (total: 17)
+The intuitive approach — having A ferry everyone across one by one — takes 19 minutes, because A pays the "escort tax" for both C and D separately (10 + 5 = 15 minutes of slow crossings). Pairing C and D collapses those into a single 10-minute crossing. The cost is a slightly slower return trip (B's 2 minutes instead of A's 1), but that trade nets out 2 minutes faster.
