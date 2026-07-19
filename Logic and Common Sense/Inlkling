@@ -1,0 +1,17 @@
+Thought
+We have a classic bridge and torch puzzle. Need to find minimal total time for four people with crossing times 1,2,5,10 minutes. Need optimal strategy. Classic answer for 1,2,5,10 is 17 minutes. Let's verify: Strategy: A(1) and B(2) cross together (2 min). A returns (1) => total 3. C(5) and D(10) cross together (10) => total 13. B returns (2) => total 15. A and B cross together (2) => total 17. Yes. Need to present reasoning. No need to search. But we can provide answer. Probably ask "What is the fastest time...". So answer 17 minutes. Let's provide clear steps.
+
+The classic answer is 17 minutes.
+
+Here is the optimal sequence:
+
+Step	Action	Time elapsed
+1	A (1 min) and B (2 min) cross together	2 min
+2	A returns with the torch	+1 min → 3 min
+3	C (5 min) and D (10 min) cross together	+10 min → 13 min
+4	B returns with the torch	+2 min → 15 min
+5	A and B cross together again	+2 min → 17 min
+Why this works best:
+The two slowest people (C and D) must cross, and since only two can be on the bridge at once with one torch, they should cross together so the 10-minute time isn’t doubled. The fastest people (A and B) then shuttle the torch back and forth to escort them.
+
+Any other strategy (e.g., having A escort everyone individually) takes 19 minutes, so 17 minutes is the minimum possible.
