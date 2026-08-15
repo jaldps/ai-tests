@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Degree 19 Polynomial Construction</title>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #2980b9;
+            margin-top: 30px;
+        }
+        .math-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-left: 4px solid #3498db;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #e67e22;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Construction of Polynomial \( p(x) \)</h1>
+
+        <p>To satisfy the condition that the curve \( X := \{p(x) = p(y)\} \) has at least 3 irreducible components (where not all are linear) for a prime degree \( n=19 \), we must use <strong>Dickson Polynomials of the first kind</strong>.</p>
+
+        <h2>1. Selecting the Polynomial Form</h2>
+        <p>For a prime degree \( n \), the factorization of \( p(x) - p(y) \) into multiple components occurs if \( p(x) \) is equivalent to a Dickson polynomial \( D_n(x, a) \). The general form of the Dickson polynomial is:</p>
+        <div class="math-block">
+            \[ D_n(x, a) = \sum_{k=0}^{\lfloor n/2 \rfloor} \frac{n}{n-k} \binom{n-k}{k} (-a)^k x^{n-2k} \]
+        </div>
+
+        <h2>2. Satisfying the Constraints</h2>
+        <ul>
+            <li><strong>Monic and Odd:</strong> By definition, \( D_{19}(x, a) \) is monic (the leading coefficient is 1) and contains only odd powers of \( x \), making it an odd function.</li>
+            <li><strong>Linear Coefficient:</strong> The linear term occurs at \( 19 - 2k = 1 \), which implies \( k = 9 \). The coefficient is:
+                \[ \text{Coeff}(x^1) = \frac{19}{19-9} \binom{19-9}{9} (-a)^9 = \frac{19}{10} \cdot 10 \cdot (-a^9) = -19 a^9 \]
+            </li>
+            <li><strong>Solving for \( a \):</strong> Given the linear coefficient is \( -19 \):
+                \[ -19 a^9 = -19 \implies a^9 = 1 \]
+                To ensure real coefficients as requested, we choose the real root <span class="highlight">\( a = 1 \)</span>.
+            </li>
+        </ul>
+
+        <h2>3. Final Polynomial Definition</h2>
+        <p>The polynomial is \( p(x) = D_{19}(x, 1) \). This can be expressed using the generating property:</p>
+        <div class="math-block">
+            \[ p\left(w + \frac{1}{w}\right) = w^{19} + \frac{1}{w^{19}} \]
+        </div>
+
+        <h2>4. Calculation of \( p(19) \)</h2>
+        <p>To find \( p(19) \), we set \( x = w + \frac{1}{w} = 19 \). We solve for \( w \):</p>
+        <div class="math-block">
+            \[ w^2 - 19w + 1 = 0 \implies w = \frac{19 + \sqrt{357}}{2} \]
+        </div>
+        <p>Substituting this into the Dickson property:</p>
+        <div class="math-block">
+            \[ p(19) = \left( \frac{19 + \sqrt{357}}{2} \right)^{19} + \left( \frac{19 - \sqrt{357}}{2} \right)^{19} \]
+        </div>
+        <p>This value is the 19th term of the Lucas sequence \( L_n \) defined by \( L_n = 19L_{n-1} - L_{n-2} \) with \( L_0 = 2, L_1 = 19 \).</p>
+
+        <div class="math-block" style="text-align: center;">
+            <span class="highlight">Result:</span><br>
+            \( p(19) = \left( \frac{19 + \sqrt{357}}{2} \right)^{19} + \left( \frac{19 - \sqrt{357}}{2} \right)^{19} \)
+        </div>
+    </div>
+</body>
+</html>
